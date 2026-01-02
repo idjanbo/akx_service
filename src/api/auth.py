@@ -3,7 +3,7 @@
 from typing import Annotated
 
 from clerk_backend_api import AuthenticateRequestOptions, Clerk, authenticate_request
-from fastapi import Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
@@ -36,9 +36,8 @@ class ClerkAuth:
         """
         try:
             request_state = authenticate_request(
-                self._client,
                 request,
-                AuthenticateRequestOptions(),
+                AuthenticateRequestOptions(secret_key=get_settings().clerk_secret_key),
             )
 
             if not request_state.is_signed_in:
@@ -101,7 +100,7 @@ async def get_current_user(
         user = User(
             clerk_id=clerk_id,
             email=email,
-            role=UserRole.MERCHANT,  # Default role
+            role=UserRole.GUEST,  # Default role for new users
             is_active=True,
         )
         db.add(user)
@@ -142,3 +141,25 @@ async def require_role(*roles: UserRole):
 # Convenience dependencies
 RequireAdmin = Depends(require_role(UserRole.SUPER_ADMIN))
 RequireMerchant = Depends(require_role(UserRole.MERCHANT, UserRole.SUPER_ADMIN))
+
+
+# FastAPI Router
+router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+@router.get("/me")
+async def get_me(user: Annotated[User, Depends(get_current_user)]):
+    """Get current user profile with role information.
+
+    Returns:
+        Current user data including role for frontend RBAC
+    """
+    return {
+        "id": user.id,
+        "clerk_id": user.clerk_id,
+        "email": user.email,
+        "role": user.role.value,
+        "is_active": user.is_active,
+        "created_at": user.created_at.isoformat(),
+        "updated_at": user.updated_at.isoformat(),
+    }

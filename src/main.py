@@ -52,12 +52,14 @@ def create_app() -> FastAPI:
 
     # Include routers
     from src.api.admin import router as admin_router
+    from src.api.auth import router as auth_router
     from src.api.dashboard import router as dashboard_router
     from src.api.merchant import router as merchant_router
     from src.api.orders import router as orders_router
     from src.api.payment import router as payment_router
     from src.api.wallets import router as wallets_router
 
+    app.include_router(auth_router, prefix="/api", tags=["auth"])
     app.include_router(payment_router, prefix="/api/v1/payment", tags=["payment"])
     app.include_router(merchant_router, prefix="/api/v1/merchant", tags=["merchant"])
     app.include_router(admin_router, prefix="/api/v1/admin", tags=["admin"])

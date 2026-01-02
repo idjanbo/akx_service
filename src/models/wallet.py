@@ -2,7 +2,7 @@
 
 from datetime import datetime
 from enum import Enum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 from sqlmodel import Field, Relationship, SQLModel
 
@@ -154,4 +154,4 @@ class Wallet(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
     # Relationships
-    user: "User | None" = Relationship(back_populates="wallets")
+    user: Optional["User"] = Relationship(back_populates="wallets")

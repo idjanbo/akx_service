@@ -16,6 +16,7 @@ class UserRole(str, Enum):
     SUPER_ADMIN = "super_admin"
     MERCHANT = "merchant"
     SUPPORT = "support"
+    GUEST = "guest"
 
 
 class User(SQLModel, table=True):
@@ -35,7 +36,7 @@ class User(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     clerk_id: str = Field(max_length=255, unique=True, index=True)
     email: str = Field(max_length=255, index=True)
-    role: UserRole = Field(default=UserRole.MERCHANT)
+    role: UserRole = Field(default=UserRole.GUEST)
     google_secret: str | None = Field(default=None, max_length=512)
     is_active: bool = Field(default=True)
     created_at: datetime = Field(default_factory=datetime.utcnow)

@@ -1,6 +1,70 @@
-# AKX Crypto Payment Gateway
+# AKX Backend API
 
-加密货币支付网关后端 API，支持多链交易（TRON、Ethereum、Solana），以 USDT 作为主要结算货币。
+区块链资产配置管理系统后端 API，提供链、币种、钱包的配置和管理功能。
+
+## 功能概述
+
+- ✅ **用户认证**：基于 Clerk 的 JWT 认证，用户自动同步到本地数据库
+- ✅ **链管理**：支持多链配置（TRON、Ethereum、Solana 等），包含 RPC、区块浏览器、确认块数等信息
+- ✅ **币种管理**：配置支持的代币（USDT、USDC 等），包含精度、图标、稳定币标识等
+- ✅ **链币种关系**：通过中间表管理币种在不同链上的支持情况，包含合约地址和手续费配置
+- ✅ **钱包管理**：查询和管理钱包配置，支持按链、用户等多维度筛选
+
+## 技术栈
+
+| 组件 | 技术选型 |
+|------|---------|
+| 语言 | Python 3.12+ |
+| 框架 | FastAPI |
+| ORM | SQLModel |
+| 数据库 | MySQL 8.0+ (aiomysql 异步驱动) |
+| 迁移 | Alembic |
+| 认证 | Clerk Backend API |
+| 包管理 | uv (Astral) |
+
+## 数据模型
+
+系统包含 5 张核心表：
+
+```
+users                      # 用户表（Clerk 同步）
+├── id (主键)
+├── clerk_id (唯一)
+├── email
+├── role (SUPER_ADMIN/MERCHANT/GUEST)
+└── is_active
+
+chains                     # 区块链网络配置
+├── id (主键)
+├── code (TRON/ETH/SOL...)
+├── name, full_name
+├── rpc_url, explorer_url
+├── confirmation_blocks
+└── is_enabled
+
+tokens                     # 代币配置
+├── id (主键)
+├── code, symbol (USDT/USDC...)
+├── name, full_name
+├── decimals
+└── is_enabled
+
+token_chain_supports       # 币种-链支持关系（多对多）
+├── id (主键)
+├── token_id (外键 → tokens)
+├── chain_id (外键 → chains)
+├── contract_address
+├── deposit_fee, withdraw_fee
+└── is_enabled
+
+wallets                    # 钱包配置
+├── id (主键)
+├── user_id (外键 → users)
+├── chain_id (外键 → chains)
+├── token_id (外键 → tokens)
+├── address
+└── wallet_type
+```
 
 ## 快速开始
 
@@ -9,7 +73,6 @@
 - Python 3.12+
 - MySQL 8.0+
 - [uv](https://docs.astral.sh/uv/) (Python 包管理器)
-- pkg-config (macOS: `brew install pkg-config`)
 
 ### 安装
 
@@ -21,8 +84,9 @@ cd akx_service
 # 安装依赖
 uv sync
 
-# 复制环境变量模板
+# 配置环境变量
 cp .env.example .env
+# 编辑 .env 填写数据库和 Clerk 配置
 ```
 
 ### 配置环境变量
@@ -33,207 +97,252 @@ cp .env.example .env
 # 数据库
 DATABASE_URL=mysql+aiomysql://user:password@localhost:3306/akx_db
 
-# AES 加密密钥 (用于私钥加密存储)
-# 生成方式: uv run python -c "from src.core.security import generate_aes_key; print(generate_aes_key())"
-AES_ENCRYPTION_KEY=<your-base64-key>
-
 # Clerk 认证
 CLERK_SECRET_KEY=sk_test_xxx
 CLERK_PUBLISHABLE_KEY=pk_test_xxx
-
-# TRON (主链)
-TRON_API_KEY=<your-trongrid-api-key>
-TRON_NETWORK=mainnet  # 或 shasta/nile 测试网
 ```
+
+### 初始化数据库
+
+```bash
+# 应用数据库迁移
+uv run alembic upgrade head
+
+# 初始化预设的链和币种数据（可选）
+uv run python -m src.scripts.init_chains_tokens
+```
+
+初始化脚本会创建：
+- 5 条链：TRON, Ethereum, Solana, Polygon, BSC
+- 7 种币：USDT, USDC, DAI, BUSD, WBTC, WETH, SOL
+- 15 条支持关系（如 USDT-TRC20, USDT-ERC20 等）
 
 ### 运行
 
 ```bash
-# 初始化数据库 (首次运行)
-uv run alembic upgrade head
-
-# 开发模式 (热重载)
+# 开发模式（热重载）
 uv run fastapi dev src/main.py
 
 # 生产模式
 uv run fastapi run src/main.py
 ```
 
-访问 API 文档: http://localhost:8000/docs
+访问 API 文档：http://localhost:8000/docs
+
+## API 端点
+
+### 认证 (`/api/auth`)
+
+- `GET /auth/me` - 获取当前用户信息
+
+### 钱包 (`/api/wallets`)
+
+- `GET /wallets` - 查询钱包列表（支持分页、筛选）
+
+### 链管理 (`/api/chains`)
+
+- `GET /chains` - 获取所有链配置
+- `GET /chains/{id}` - 获取指定链详情
+- `POST /chains` - 创建新链（管理员）
+- `PATCH /chains/{id}` - 更新链配置（管理员）
+- `DELETE /chains/{id}` - 删除链（管理员）
+
+### 币种管理 (`/api/tokens`)
+
+- `GET /tokens` - 获取所有币种
+- `GET /tokens/{id}` - 获取指定币种详情
+- `GET /tokens/{id}/with-chains` - 获取币种及其支持的所有链
+- `POST /tokens` - 创建新币种（管理员）
+- `PATCH /tokens/{id}` - 更新币种配置（管理员）
+- `DELETE /tokens/{id}` - 删除币种（管理员）
+
+### 币种-链支持关系 (`/api/token-chain-supports`)
+
+- `GET /token-chain-supports` - 获取所有支持关系
+- `GET /token-chain-supports/{id}` - 获取指定关系详情
+- `POST /token-chain-supports` - 创建支持关系（管理员）
+- `PATCH /token-chain-supports/{id}` - 更新关系配置（管理员）
+- `DELETE /token-chain-supports/{id}` - 删除支持关系（管理员）
 
 ## 项目结构
 
 ```
 src/
-├── main.py              # FastAPI 应用入口
-├── core/
-│   ├── config.py        # 配置管理 (Pydantic Settings)
-│   ├── security.py      # AES-256-GCM 加密工具
-│   └── exceptions.py    # 自定义异常
-├── db/
-│   └── engine.py        # 异步 MySQL 引擎
-├── models/
-│   ├── user.py          # 用户模型 (Clerk 同步)
-│   ├── wallet.py        # 钱包模型 (加密私钥)
-│   ├── order.py         # 订单模型 (充值/提现)
-│   └── transaction.py   # 流水账本
-├── chains/
-│   ├── base.py          # ChainInterface 抽象类
-│   └── tron.py          # TRON 链实现
-├── api/                 # API 路由 (待实现)
-├── services/            # 业务逻辑层 (待实现)
-├── schemas/             # Pydantic DTOs (待实现)
-└── workers/             # 后台任务 (待实现)
+├── main.py                    # FastAPI 应用入口
+├── api/                       # API 路由
+│   ├── auth.py               # 认证相关
+│   ├── wallets.py            # 钱包管理
+│   └── chains_tokens.py      # 链和币种管理（18个端点）
+├── models/                    # SQLModel 数据模型
+│   ├── user.py               # 用户模型
+│   ├── wallet.py             # 钱包模型
+│   ├── chain.py              # 链模型
+│   └── token.py              # 币种和关系模型
+├── schemas/                   # Pydantic DTOs
+│   └── chain_token.py        # 链/币种请求响应模型
+├── core/                      # 核心配置
+│   ├── config.py             # Pydantic Settings
+│   ├── security.py           # 安全工具
+│   └── exceptions.py         # 自定义异常
+├── db/                        # 数据库
+│   └── engine.py             # 异步 MySQL 引擎
+├── scripts/                   # 工具脚本
+│   └── init_chains_tokens.py # 初始化预设数据
+└── services/                  # 业务逻辑层（保留目录）
+
+alembic/
+└── versions/
+    └── de10130405a2_*.py     # 初始数据库迁移
 ```
 
 ## 开发命令
 
 ```bash
-# 安装开发依赖
-uv sync --dev
-
-# 运行测试
-uv run pytest
-
-# 类型检查
-uv run mypy src/
-
 # 代码格式化
 uv run ruff format src/
 
 # 代码检查
 uv run ruff check src/ --fix
+
+# 类型检查
+uv run mypy src/
 ```
 
 ## 数据库迁移
 
-项目使用 [Alembic](https://alembic.sqlalchemy.org/) 管理数据库迁移。
-
 ```bash
-# 应用所有迁移 (初始化数据库)
-uv run alembic upgrade head
-
-# 查看当前迁移版本
+# 查看当前版本
 uv run alembic current
 
 # 查看迁移历史
 uv run alembic history
 
-# 生成新的迁移 (修改模型后)
+# 生成新迁移（修改模型后）
 uv run alembic revision --autogenerate -m "描述变更"
+
+# 应用迁移
+uv run alembic upgrade head
 
 # 回滚上一个迁移
 uv run alembic downgrade -1
 
 # 回滚到指定版本
 uv run alembic downgrade <revision_id>
-
-# 离线生成 SQL (不连接数据库)
-uv run alembic upgrade head --sql > migration.sql
 ```
 
-## 核心功能
+## 角色权限
 
-### 已实现
-- [x] 项目骨架与配置
-- [x] AES-256-GCM 私钥加密
-- [x] 异步 MySQL 数据库引擎
-- [x] SQLModel 数据模型 (User, Wallet, Order, Transaction, Webhook, FeeConfig, Merchant)
-- [x] TRON 链抽象与实现
-- [x] Clerk 认证中间件 (JWT 验证 + 用户同步)
-- [x] 商户 API (钱包管理、充值地址、提现、订单查询、余额)
-- [x] 管理员 API (用户管理、系统钱包、仪表板统计)
-- [x] Webhook 服务 (HMAC 签名、重试机制、投递记录)
-- [x] 区块扫描 Worker (监控存款，每链独立进程)
-- [x] 资金归集 Sweeper (Gas 补充 + USDT 归集)
-- [x] 热钱包提现执行逻辑
-- [x] 冻结余额计算 (待处理提现)
-- [x] 动态费率配置模型
-- [x] Celery 任务队列 (基于 Redis)
-- [x] 支付 API (HMAC-SHA256 签名认证)
-- [x] 商户密钥管理 (充值密钥 / 提现密钥)
+系统定义了三种用户角色：
 
-### 待实现
-- [ ] Ethereum 链实现完善
-- [ ] Solana 链实现完善
-- [ ] Google Authenticator (TOTP) 双因素认证
+- **SUPER_ADMIN**：超级管理员，拥有所有权限
+- **MERCHANT**：商户用户，可查看自己的钱包和配置
+- **GUEST**：访客，仅查看权限
 
-## 运行后台任务
+大部分配置管理接口（创建/修改/删除链、币种）需要 `SUPER_ADMIN` 权限。
 
-项目使用 [Celery](https://docs.celeryq.dev/) 作为任务队列，基于 Redis。每条链有独立的 Worker 进程。
+## 认证流程
 
-### 配置 Redis
+1. 前端使用 Clerk 完成用户登录，获取 JWT token
+2. 前端在请求头中携带 `Authorization: Bearer <token>`
+3. 后端验证 Clerk JWT，提取 `clerk_id`
+4. 在本地 `users` 表查找或创建用户记录
+5. 返回用户信息供业务逻辑使用
 
+## 链和币种配置流程
+
+### 典型使用场景
+
+**场景 1：添加新链**
 ```bash
-# 启动 Redis (Docker)
-docker run -d --name redis -p 6379:6379 redis:alpine
-
-# 或安装本地 Redis (macOS)
-brew install redis && brew services start redis
+POST /api/chains
+{
+  "code": "POLYGON",
+  "name": "Polygon",
+  "full_name": "Polygon (Matic Network)",
+  "rpc_url": "https://polygon-rpc.com",
+  "explorer_url": "https://polygonscan.com",
+  "confirmation_blocks": 128,
+  "is_enabled": true
+}
 ```
 
-### 启动 Workers
-
+**场景 2：添加新币种**
 ```bash
-# 启动所有 Workers
-uv run celery -A src.workers.celery_app worker -l info
-
-# 启动定时任务调度器 (Beat)
-uv run celery -A src.workers.celery_app beat -l info
-
-# 按链独立启动 Worker (生产推荐)
-uv run celery -A src.workers.celery_app worker -Q tron -l info -c 1 --hostname=tron@%h
-uv run celery -A src.workers.celery_app worker -Q ethereum -l info -c 1 --hostname=eth@%h
-uv run celery -A src.workers.celery_app worker -Q solana -l info -c 1 --hostname=sol@%h
-uv run celery -A src.workers.celery_app worker -Q common -l info -c 2 --hostname=common@%h
+POST /api/tokens
+{
+  "code": "SHIB",
+  "symbol": "SHIB",
+  "name": "Shiba Inu",
+  "decimals": 18,
+  "is_enabled": true
+}
 ```
 
-### 定时任务
+**场景 3：配置币种在某条链上的支持**
+```bash
+POST /api/token-chain-supports
+{
+  "token_id": 8,  # SHIB
+  "chain_id": 2,  # Ethereum
+  "contract_address": "0x95aD61b0a150d79219dCF64E1E6Cc01f0B64C4cE",
+  "deposit_fee": "0.00",
+  "withdraw_fee": "100000",  # 0.1 SHIB
+  "is_enabled": true
+}
+```
 
-| 任务 | 队列 | 间隔 | 描述 |
-|-----|------|------|------|
-| scan_tron_blocks | tron | 10秒 | 扫描 TRON 区块 |
-| scan_ethereum_blocks | ethereum | 15秒 | 扫描 Ethereum 区块 |
-| scan_solana_blocks | solana | 5秒 | 扫描 Solana 区块 |
-| sweep_funds | common | 5分钟 | 归集资金到冷钱包 |
-| retry_webhooks | common | 1分钟 | 重试失败的 Webhook |
-| process_withdrawals | common | 30秒 | 处理待执行提现 |
+**场景 4：前端币种选择流程**
+```bash
+# 1. 用户选择币种
+GET /api/tokens/{token_id}/with-chains
 
-## 支付 API
+# 返回：
+{
+  "id": 1,
+  "code": "USDT",
+  "symbol": "USDT",
+  "name": "Tether USD",
+  "supported_chains": [
+    {
+      "chain_id": 1,
+      "chain_code": "TRON",
+      "chain_name": "TRON",
+      "contract_address": "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
+      "deposit_fee": "0.00",
+      "withdraw_fee": "1.00"
+    },
+    {
+      "chain_id": 2,
+      "chain_code": "ETH",
+      "chain_name": "Ethereum",
+      "contract_address": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+      "deposit_fee": "0.00",
+      "withdraw_fee": "5.00"
+    }
+  ]
+}
 
-商户通过 API 密钥 + HMAC-SHA256 签名调用支付接口。
+# 2. 用户从 supported_chains 中选择具体链
+```
 
-详见 [支付接入文档](docs/PAYMENT_API.md)
+## 常见问题
 
-## 安全注意事项
+**Q: 如何添加自定义链？**
 
-⚠️ **私钥安全**
-- 私钥使用 AES-256-GCM 加密后存储
-- `AES_ENCRYPTION_KEY` 必须从环境变量读取，禁止写入代码
-- 私钥解密后仅在内存中使用，用完立即清除
+A: 使用 `POST /api/chains` 创建，需要 SUPER_ADMIN 权限。
 
-⚠️ **API 密钥安全**
-- 商户有两套密钥：`deposit_key` 和 `withdraw_key`
-- 密钥用于 HMAC-SHA256 签名验证
-- 请妥善保管，不要泄露
+**Q: 如何让某个币种支持新链？**
 
-## 技术栈
+A: 使用 `POST /api/token-chain-supports` 创建关联，填写合约地址和手续费。
 
-| 组件 | 技术选型 |
-|------|---------|
-| 框架 | FastAPI |
-| ORM | SQLModel + aiomysql |
-| 数据库 | MySQL 8.0+ |
-| 任务队列 | Celery + Redis |
-| 认证 | Clerk / HMAC-SHA256 |
-| 加密 | cryptography (AES-256-GCM) |
-| 区块链 | tronpy, web3.py, solana-py |
+**Q: 初始化脚本可以重复运行吗？**
 
-## 文档
+A: 不建议。脚本会检查 `code` 唯一性，重复运行会报错。如需重置，请清空相关表。
 
-- [SPEC.md](SPEC.md) - 详细技术规格文档
-- [docs/PAYMENT_API.md](docs/PAYMENT_API.md) - 支付接入文档
+**Q: 如何修改手续费？**
 
-## License
+A: 使用 `PATCH /api/token-chain-supports/{id}` 更新 `deposit_fee` 和 `withdraw_fee`。
+
+## 许可证
 
 MIT

@@ -5,7 +5,7 @@ according to the system requirements.
 
 Chains:
 - TRON
-- Ethereum  
+- Ethereum
 - BNB Chain
 - Solana
 - The Open Network (TON)
@@ -189,22 +189,69 @@ TOKENS = [
 ]
 
 # Token-Chain support mappings
-# Format: (token_code, chain_code, contract_address, is_native, min_deposit, min_withdrawal, withdrawal_fee)
+# Format: (token_code, chain_code, contract_address, is_native, min_deposit, min_withdrawal,
+#  withdrawal_fee)
 TOKEN_CHAIN_MAPPINGS = [
     # USDT supports
     ("USDT", "TRON", "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t", False, "1.0", "10.0", "1.0"),
-    ("USDT", "ETHEREUM", "0xdAC17F958D2ee523a2206206994597C13D831ec7", False, "10.0", "50.0", "5.0"),
-    ("USDT", "BNB_CHAIN", "0x55d398326f99059fF775485246999027B3197955", False, "1.0", "10.0", "0.5"),
+    (
+        "USDT",
+        "ETHEREUM",
+        "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+        False,
+        "10.0",
+        "50.0",
+        "5.0",
+    ),
+    (
+        "USDT",
+        "BNB_CHAIN",
+        "0x55d398326f99059fF775485246999027B3197955",
+        False,
+        "1.0",
+        "10.0",
+        "0.5",
+    ),
     ("USDT", "SOLANA", "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB", False, "1.0", "10.0", "0.1"),
-    ("USDT", "TON", "EQCxE6mUtQJKFnGfaROTKOt1lZbDiiX1kCixRv7Nw2Id_sDs", False, "1.0", "10.0", "0.5"),
-
+    (
+        "USDT",
+        "TON",
+        "EQCxE6mUtQJKFnGfaROTKOt1lZbDiiX1kCixRv7Nw2Id_sDs",
+        False,
+        "1.0",
+        "10.0",
+        "0.5",
+    ),
     # USDC supports
     ("USDC", "TRON", "TEkxiTehnzSmSe2XqrBj4w32RUN966rdz8", False, "1.0", "10.0", "1.0"),
-    ("USDC", "ETHEREUM", "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", False, "10.0", "50.0", "5.0"),
-    ("USDC", "BNB_CHAIN", "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d", False, "1.0", "10.0", "0.5"),
+    (
+        "USDC",
+        "ETHEREUM",
+        "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        False,
+        "10.0",
+        "50.0",
+        "5.0",
+    ),
+    (
+        "USDC",
+        "BNB_CHAIN",
+        "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d",
+        False,
+        "1.0",
+        "10.0",
+        "0.5",
+    ),
     ("USDC", "SOLANA", "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", False, "1.0", "10.0", "0.1"),
-    ("USDC", "TON", "EQC_1YoM8RBixN95lz7odcF3Vrkc_N8Ne7gQi7Abtlet_Efi", False, "1.0", "10.0", "0.5"),
-
+    (
+        "USDC",
+        "TON",
+        "EQC_1YoM8RBixN95lz7odcF3Vrkc_N8Ne7gQi7Abtlet_Efi",
+        False,
+        "1.0",
+        "10.0",
+        "0.5",
+    ),
     # Native tokens
     ("TRX", "TRON", "", True, "10.0", "100.0", "1.0"),
     ("SOL", "SOLANA", "", True, "0.01", "0.1", "0.001"),
@@ -225,9 +272,7 @@ async def init_chains_tokens():
 
         for chain_data in CHAINS:
             # Check if chain already exists
-            result = await session.execute(
-                select(Chain).where(Chain.code == chain_data["code"])
-            )
+            result = await session.execute(select(Chain).where(Chain.code == chain_data["code"]))
             existing_chain = result.scalars().first()
 
             if existing_chain:
@@ -249,9 +294,7 @@ async def init_chains_tokens():
 
         for token_data in TOKENS:
             # Check if token already exists
-            result = await session.execute(
-                select(Token).where(Token.code == token_data["code"])
-            )
+            result = await session.execute(select(Token).where(Token.code == token_data["code"]))
             existing_token = result.scalars().first()
 
             if existing_token:
@@ -277,12 +320,22 @@ async def init_chains_tokens():
         print("\n3. Creating token-chain support mappings...")
         support_count = 0
 
-        for token_code, chain_code, contract_addr, is_native, min_dep, min_with, with_fee in TOKEN_CHAIN_MAPPINGS:
+        for (
+            token_code,
+            chain_code,
+            contract_addr,
+            is_native,
+            min_dep,
+            min_with,
+            with_fee,
+        ) in TOKEN_CHAIN_MAPPINGS:
             token = token_map.get(token_code)
             chain = chain_map.get(chain_code)
 
             if not token or not chain:
-                print(f"   ! Warning: Token {token_code} or Chain {chain_code} not found, skipping...")
+                print(
+                    f"   ! Warning: Token {token_code} or Chain {chain_code} not found, skipping..."
+                )
                 continue
 
             # Check if support already exists
@@ -315,9 +368,9 @@ async def init_chains_tokens():
         await session.commit()
         print(f"✓ Token-chain supports initialized: {support_count} mappings")
 
-        print("\n" + "="*60)
+        print("\n" + "=" * 60)
         print("✓ All chains and tokens initialized successfully!")
-        print("="*60)
+        print("=" * 60)
         print("\nSummary:")
         print(f"  - {len(chain_map)} chains created")
         print(f"  - {len(token_map)} tokens created")

@@ -29,13 +29,10 @@ if config.config_file_name is not None:
 
 # Import all models to ensure they are registered with SQLModel.metadata
 # This is required for autogenerate to detect models
-from src.models.fee_config import FeeConfig  # noqa: F401, E402
-from src.models.merchant import Merchant  # noqa: F401, E402
-from src.models.order import Order  # noqa: F401, E402
-from src.models.transaction import Transaction  # noqa: F401, E402
+from src.models.chain import Chain  # noqa: F401, E402
+from src.models.token import Token, TokenChainSupport  # noqa: F401, E402
 from src.models.user import User  # noqa: F401, E402
 from src.models.wallet import Wallet  # noqa: F401, E402
-from src.models.webhook import WebhookDelivery  # noqa: F401, E402
 
 # Set target metadata for autogenerate support
 target_metadata = SQLModel.metadata

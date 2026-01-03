@@ -2,7 +2,7 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import func, select
@@ -10,7 +10,7 @@ from sqlmodel import func, select
 from src.api.auth import get_current_user
 from src.db import get_db
 from src.models.user import User, UserRole
-from src.models.wallet import Chain, Wallet, WalletType
+from src.models.wallet import ChainEnum, Wallet, WalletType
 
 router = APIRouter()
 
@@ -46,7 +46,7 @@ class PaginatedWalletsResponse(BaseModel):
 async def list_wallets(
     user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
-    chain: Chain | None = None,
+    chain: ChainEnum | None = None,
     source: str | None = None,
     is_active: bool | None = None,
     page: Annotated[int, Query(ge=1)] = 1,
@@ -102,9 +102,7 @@ async def list_wallets(
                 chain=w.chain.value,
                 address=w.address,
                 source=(
-                    "SYSTEM_GENERATED"
-                    if w.wallet_type == WalletType.DEPOSIT
-                    else "MANUAL_IMPORT"
+                    "SYSTEM_GENERATED" if w.wallet_type == WalletType.DEPOSIT else "MANUAL_IMPORT"
                 ),
                 balance=None,  # TODO: Fetch from chain
                 merchant_id=w.user_id,

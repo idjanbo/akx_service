@@ -12,8 +12,8 @@ from typing import TYPE_CHECKING, Optional
 from sqlmodel import Field, Relationship, SQLModel
 
 if TYPE_CHECKING:
-    from src.models.chain import Chain as ChainModel
-    from src.models.token import Token as TokenModel
+    from src.models.chain import Chain
+    from src.models.token import Token
     from src.models.user import User
 
 
@@ -169,5 +169,5 @@ class Wallet(SQLModel, table=True):
 
     # Relationships
     user: Optional["User"] = Relationship(back_populates="wallets")
-    chain: Optional["ChainModel"] = Relationship()
-    token: Optional["TokenModel"] = Relationship()
+    chain: Optional["Chain"] = Relationship()
+    token: Optional["Token"] = Relationship()

@@ -18,8 +18,7 @@ class Chain(SQLModel, table=True):
     Attributes:
         id: Auto-increment primary key
         code: Unique chain identifier code (e.g., 'TRON', 'ETH', 'BSC')
-        name: Full name of the chain (e.g., 'TRON Network')
-        full_name: Complete official name (e.g., 'TRON Blockchain Network')
+        name: Chain name (e.g., 'TRON')
         description: Chain description and notes
         remark: Internal remarks/memo
         is_enabled: Whether this chain is currently active
@@ -35,31 +34,18 @@ class Chain(SQLModel, table=True):
     __tablename__ = "chains"
 
     id: int | None = Field(default=None, primary_key=True)
-    code: str = Field(
-        max_length=20, unique=True, index=True, description="Chain code (uppercase)"
-    )
+    code: str = Field(max_length=20, unique=True, index=True, description="Chain code (uppercase)")
     name: str = Field(max_length=100, description="Chain name")
-    full_name: str = Field(max_length=200, description="Full official name")
-    description: str | None = Field(
-        default=None, max_length=500, description="Chain description"
-    )
-    remark: str | None = Field(
-        default=None, max_length=500, description="Internal remarks"
-    )
+    description: str | None = Field(default=None, max_length=500, description="Chain description")
+    remark: str | None = Field(default=None, max_length=500, description="Internal remarks")
 
     is_enabled: bool = Field(default=True, description="Is chain active")
     sort_order: int = Field(default=0, description="Display order")
 
     # Chain-specific configuration
-    rpc_url: str | None = Field(
-        default=None, max_length=500, description="RPC endpoint"
-    )
-    explorer_url: str | None = Field(
-        default=None, max_length=500, description="Block explorer URL"
-    )
-    native_token: str | None = Field(
-        default=None, max_length=20, description="Native token symbol"
-    )
+    rpc_url: str | None = Field(default=None, max_length=500, description="RPC endpoint")
+    explorer_url: str | None = Field(default=None, max_length=500, description="Block explorer URL")
+    native_token: str | None = Field(default=None, max_length=20, description="Native token symbol")
     confirmation_blocks: int = Field(default=1, description="Required confirmations")
 
     created_at: datetime = Field(default_factory=datetime.utcnow)
@@ -70,17 +56,17 @@ class Chain(SQLModel, table=True):
 
     class Config:
         """Pydantic configuration."""
+
         json_schema_extra = {
             "example": {
                 "code": "TRON",
                 "name": "TRON",
-                "full_name": "TRON Blockchain Network",
                 "description": "High-throughput blockchain supporting TRC-20 tokens",
                 "is_enabled": True,
                 "sort_order": 1,
                 "rpc_url": "https://api.trongrid.io",
                 "explorer_url": "https://tronscan.org",
                 "native_token": "TRX",
-                "confirmation_blocks": 19
+                "confirmation_blocks": 19,
             }
         }

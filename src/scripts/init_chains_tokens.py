@@ -27,7 +27,7 @@ import asyncio
 
 from sqlmodel import select
 
-from src.db.engine import async_session_maker
+from src.db.engine import async_session_factory, close_db
 from src.models.chain import Chain
 from src.models.token import Token, TokenChainSupport
 
@@ -35,8 +35,7 @@ from src.models.token import Token, TokenChainSupport
 CHAINS = [
     {
         "code": "TRON",
-        "name": "TRON",
-        "full_name": "TRON Blockchain Network",
+        "name": "TRON (TRC20)",
         "description": "High-throughput blockchain supporting TRC-20 tokens with low fees",
         "remark": "Primary chain for USDT transactions",
         "is_enabled": True,
@@ -47,9 +46,8 @@ CHAINS = [
         "confirmation_blocks": 19,
     },
     {
-        "code": "ETHEREUM",
-        "name": "Ethereum",
-        "full_name": "Ethereum Blockchain Network",
+        "code": "ETH",
+        "name": "Ethereum (ERC20)",
         "description": "Leading smart contract platform with extensive DeFi ecosystem",
         "remark": "Higher gas fees, more secure",
         "is_enabled": True,
@@ -60,9 +58,8 @@ CHAINS = [
         "confirmation_blocks": 12,
     },
     {
-        "code": "BNB_CHAIN",
-        "name": "BNB Chain",
-        "full_name": "BNB Smart Chain (BSC)",
+        "code": "BSC",
+        "name": "BNB Smart Chain (BEP20)",
         "description": "Binance Smart Chain with EVM compatibility and low fees",
         "remark": "Fast and cost-effective alternative to Ethereum",
         "is_enabled": True,
@@ -73,9 +70,8 @@ CHAINS = [
         "confirmation_blocks": 15,
     },
     {
-        "code": "SOLANA",
-        "name": "Solana",
-        "full_name": "Solana Blockchain Network",
+        "code": "SOL",
+        "name": "Solana (SPL)",
         "description": "High-performance blockchain with sub-second finality",
         "remark": "Very fast transactions, growing ecosystem",
         "is_enabled": True,
@@ -87,8 +83,7 @@ CHAINS = [
     },
     {
         "code": "TON",
-        "name": "The Open Network",
-        "full_name": "The Open Network (TON)",
+        "name": "TON (Jetton)",
         "description": "Telegram's blockchain with fast and scalable architecture",
         "remark": "Telegram integration, fast finality",
         "is_enabled": True,
@@ -263,7 +258,7 @@ TOKEN_CHAIN_MAPPINGS = [
 
 async def init_chains_tokens():
     """Initialize chains and tokens in the database."""
-    async with async_session_maker() as session:
+    async with async_session_factory() as session:
         print("Starting chains and tokens initialization...")
 
         # 1. Create chains
@@ -378,5 +373,14 @@ async def init_chains_tokens():
         print("\nYou can now use the API to manage chains, tokens, and their relationships.")
 
 
+async def main():
+    """Main function to run initialization and cleanup."""
+    try:
+        await init_chains_tokens()
+    finally:
+        # Ensure database connections are properly closed
+        await close_db()
+
+
 if __name__ == "__main__":
-    asyncio.run(init_chains_tokens())
+    asyncio.run(main())

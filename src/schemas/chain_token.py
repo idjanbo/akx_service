@@ -4,35 +4,29 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
-
 # ============================================================================
 # Chain Schemas
 # ============================================================================
+
 
 class ChainBase(BaseModel):
     """Base chain attributes."""
 
     code: str = Field(..., description="Chain code (uppercase)", max_length=20)
     name: str = Field(..., description="Chain name", max_length=100)
-    full_name: str = Field(..., description="Full official name", max_length=200)
-    description: str | None = Field(
-        None, description="Chain description", max_length=500
-    )
+    description: str | None = Field(None, description="Chain description", max_length=500)
     remark: str | None = Field(None, description="Internal remarks", max_length=500)
     is_enabled: bool = Field(True, description="Is chain active")
     sort_order: int = Field(0, description="Display order")
     rpc_url: str | None = Field(None, description="RPC endpoint", max_length=500)
-    explorer_url: str | None = Field(
-        None, description="Block explorer URL", max_length=500
-    )
-    native_token: str | None = Field(
-        None, description="Native token symbol", max_length=20
-    )
+    explorer_url: str | None = Field(None, description="Block explorer URL", max_length=500)
+    native_token: str | None = Field(None, description="Native token symbol", max_length=20)
     confirmation_blocks: int = Field(1, description="Required confirmations")
 
 
 class ChainCreate(ChainBase):
     """Schema for creating a new chain."""
+
     pass
 
 
@@ -66,6 +60,7 @@ class ChainResponse(ChainBase):
 # Token Schemas
 # ============================================================================
 
+
 class TokenBase(BaseModel):
     """Base token attributes."""
 
@@ -73,21 +68,18 @@ class TokenBase(BaseModel):
     symbol: str = Field(..., description="Trading symbol", max_length=20)
     name: str = Field(..., description="Token name", max_length=100)
     full_name: str = Field(..., description="Full official name", max_length=200)
-    description: str | None = Field(
-        None, description="Token description", max_length=500
-    )
+    description: str | None = Field(None, description="Token description", max_length=500)
     remark: str | None = Field(None, description="Internal remarks", max_length=500)
     is_enabled: bool = Field(True, description="Is token active")
     sort_order: int = Field(0, description="Display order")
     decimals: int = Field(6, description="Default decimal places")
-    icon_url: str | None = Field(
-        None, description="Token icon URL", max_length=500
-    )
+    icon_url: str | None = Field(None, description="Token icon URL", max_length=500)
     is_stablecoin: bool = Field(False, description="Is stablecoin")
 
 
 class TokenCreate(TokenBase):
     """Schema for creating a new token."""
+
     pass
 
 
@@ -121,6 +113,7 @@ class TokenResponse(TokenBase):
 # TokenChainSupport Schemas
 # ============================================================================
 
+
 class TokenChainSupportBase(BaseModel):
     """Base token-chain support attributes."""
 
@@ -129,24 +122,17 @@ class TokenChainSupportBase(BaseModel):
     contract_address: str = Field(
         "", description="Contract address (empty for native)", max_length=200
     )
-    decimals: int | None = Field(
-        None, description="Override decimals for this chain"
-    )
+    decimals: int | None = Field(None, description="Override decimals for this chain")
     is_enabled: bool = Field(True, description="Is this token-chain pair active")
     is_native: bool = Field(False, description="Is native token of the chain")
-    min_deposit: str | None = Field(
-        None, description="Minimum deposit amount", max_length=50
-    )
-    min_withdrawal: str | None = Field(
-        None, description="Minimum withdrawal amount", max_length=50
-    )
-    withdrawal_fee: str | None = Field(
-        None, description="Fixed withdrawal fee", max_length=50
-    )
+    min_deposit: str | None = Field(None, description="Minimum deposit amount", max_length=50)
+    min_withdrawal: str | None = Field(None, description="Minimum withdrawal amount", max_length=50)
+    withdrawal_fee: str | None = Field(None, description="Fixed withdrawal fee", max_length=50)
 
 
 class TokenChainSupportCreate(TokenChainSupportBase):
     """Schema for creating token-chain support."""
+
     pass
 
 
@@ -180,16 +166,33 @@ class TokenChainSupportWithDetails(TokenChainSupportResponse):
     chain: ChainResponse
 
 
+class TokenChainSupportDisplay(BaseModel):
+    """Flattened token-chain support for frontend display."""
+
+    id: int
+    token_code: str = Field(..., description="Token code")
+    chain_code: str = Field(..., description="Chain code")
+    contract_address: str = Field(..., description="Contract address")
+    decimals: int = Field(..., description="Decimal places")
+    is_native: bool = Field(..., description="Is native token")
+    is_enabled: bool = Field(..., description="Is enabled")
+    min_deposit: str | None = Field(None, description="Minimum deposit")
+    min_withdrawal: str | None = Field(None, description="Minimum withdrawal")
+    withdrawal_fee: str | None = Field(None, description="Withdrawal fee")
+    created_at: datetime
+    updated_at: datetime
+
+
 # ============================================================================
 # Combined Schemas for Frontend
 # ============================================================================
+
 
 class TokenWithChains(TokenResponse):
     """Token with list of supported chains."""
 
     supported_chains: list[dict] = Field(
-        default_factory=list,
-        description="List of chains supporting this token with configuration"
+        default_factory=list, description="List of chains supporting this token with configuration"
     )
 
 
@@ -198,5 +201,5 @@ class ChainWithTokens(ChainResponse):
 
     supported_tokens: list[dict] = Field(
         default_factory=list,
-        description="List of tokens supported on this chain with configuration"
+        description="List of tokens supported on this chain with configuration",
     )

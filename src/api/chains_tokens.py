@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from src.db.engine import get_session
+from src.db.engine import get_db
 from src.models.chain import Chain
 from src.models.token import Token, TokenChainSupport
 from src.schemas.chain_token import (
@@ -13,9 +13,9 @@ from src.schemas.chain_token import (
     ChainUpdate,
     ChainWithTokens,
     TokenChainSupportCreate,
+    TokenChainSupportDisplay,
     TokenChainSupportResponse,
     TokenChainSupportUpdate,
-    TokenChainSupportWithDetails,
     TokenCreate,
     TokenResponse,
     TokenUpdate,
@@ -29,10 +29,11 @@ router = APIRouter(prefix="/api", tags=["chains-tokens"])
 # Chain Endpoints
 # ============================================================================
 
+
 @router.get("/chains", response_model=list[ChainResponse])
 async def list_chains(
     is_enabled: bool | None = Query(None, description="Filter by enabled status"),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_db),
 ):
     """List all blockchain networks.
 
@@ -52,7 +53,7 @@ async def list_chains(
 @router.get("/chains/{chain_id}", response_model=ChainResponse)
 async def get_chain(
     chain_id: int,
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_db),
 ):
     """Get chain details by ID."""
     chain = await session.get(Chain, chain_id)
@@ -64,7 +65,7 @@ async def get_chain(
 @router.get("/chains/{chain_id}/with-tokens", response_model=ChainWithTokens)
 async def get_chain_with_tokens(
     chain_id: int,
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_db),
 ):
     """Get chain with list of supported tokens."""
     chain = await session.get(Chain, chain_id)
@@ -84,17 +85,19 @@ async def get_chain_with_tokens(
 
     supported_tokens = []
     for support, token in supports:
-        supported_tokens.append({
-            "token_id": token.id,
-            "token_code": token.code,
-            "token_name": token.name,
-            "contract_address": support.contract_address,
-            "decimals": support.decimals or token.decimals,
-            "is_native": support.is_native,
-            "min_deposit": support.min_deposit,
-            "min_withdrawal": support.min_withdrawal,
-            "withdrawal_fee": support.withdrawal_fee,
-        })
+        supported_tokens.append(
+            {
+                "token_id": token.id,
+                "token_code": token.code,
+                "token_name": token.name,
+                "contract_address": support.contract_address,
+                "decimals": support.decimals or token.decimals,
+                "is_native": support.is_native,
+                "min_deposit": support.min_deposit,
+                "min_withdrawal": support.min_withdrawal,
+                "withdrawal_fee": support.withdrawal_fee,
+            }
+        )
 
     chain_dict = chain.model_dump()
     chain_dict["supported_tokens"] = supported_tokens
@@ -104,7 +107,7 @@ async def get_chain_with_tokens(
 @router.post("/chains", response_model=ChainResponse)
 async def create_chain(
     chain_data: ChainCreate,
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_db),
 ):
     """Create a new blockchain network.
 
@@ -126,7 +129,7 @@ async def create_chain(
 async def update_chain(
     chain_id: int,
     chain_data: ChainUpdate,
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_db),
 ):
     """Update chain configuration.
 
@@ -142,6 +145,7 @@ async def update_chain(
         setattr(chain, field, value)
 
     from datetime import datetime
+
     chain.updated_at = datetime.utcnow()
 
     await session.commit()
@@ -152,7 +156,7 @@ async def update_chain(
 @router.delete("/chains/{chain_id}")
 async def delete_chain(
     chain_id: int,
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_db),
 ):
     """Delete a chain.
 
@@ -172,13 +176,12 @@ async def delete_chain(
 # Token Endpoints
 # ============================================================================
 
+
 @router.get("/tokens", response_model=list[TokenResponse])
 async def list_tokens(
     is_enabled: bool | None = Query(None, description="Filter by enabled status"),
-    is_stablecoin: bool | None = Query(
-        None, description="Filter by stablecoin status"
-    ),
-    session: AsyncSession = Depends(get_session),
+    is_stablecoin: bool | None = Query(None, description="Filter by stablecoin status"),
+    session: AsyncSession = Depends(get_db),
 ):
     """List all cryptocurrency tokens.
 
@@ -201,7 +204,7 @@ async def list_tokens(
 @router.get("/tokens/{token_id}", response_model=TokenResponse)
 async def get_token(
     token_id: int,
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_db),
 ):
     """Get token details by ID."""
     token = await session.get(Token, token_id)
@@ -213,7 +216,7 @@ async def get_token(
 @router.get("/tokens/{token_id}/with-chains", response_model=TokenWithChains)
 async def get_token_with_chains(
     token_id: int,
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_db),
 ):
     """Get token with list of supported chains.
 
@@ -238,18 +241,20 @@ async def get_token_with_chains(
 
     supported_chains = []
     for support, chain in supports:
-        supported_chains.append({
-            "chain_id": chain.id,
-            "chain_code": chain.code,
-            "chain_name": chain.name,
-            "contract_address": support.contract_address,
-            "decimals": support.decimals or token.decimals,
-            "is_native": support.is_native,
-            "min_deposit": support.min_deposit,
-            "min_withdrawal": support.min_withdrawal,
-            "withdrawal_fee": support.withdrawal_fee,
-            "confirmation_blocks": chain.confirmation_blocks,
-        })
+        supported_chains.append(
+            {
+                "chain_id": chain.id,
+                "chain_code": chain.code,
+                "chain_name": chain.name,
+                "contract_address": support.contract_address,
+                "decimals": support.decimals or token.decimals,
+                "is_native": support.is_native,
+                "min_deposit": support.min_deposit,
+                "min_withdrawal": support.min_withdrawal,
+                "withdrawal_fee": support.withdrawal_fee,
+                "confirmation_blocks": chain.confirmation_blocks,
+            }
+        )
 
     token_dict = token.model_dump()
     token_dict["supported_chains"] = supported_chains
@@ -259,7 +264,7 @@ async def get_token_with_chains(
 @router.post("/tokens", response_model=TokenResponse)
 async def create_token(
     token_data: TokenCreate,
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_db),
 ):
     """Create a new cryptocurrency token.
 
@@ -281,7 +286,7 @@ async def create_token(
 async def update_token(
     token_id: int,
     token_data: TokenUpdate,
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_db),
 ):
     """Update token configuration.
 
@@ -297,6 +302,7 @@ async def update_token(
         setattr(token, field, value)
 
     from datetime import datetime
+
     token.updated_at = datetime.utcnow()
 
     await session.commit()
@@ -307,7 +313,7 @@ async def update_token(
 @router.delete("/tokens/{token_id}")
 async def delete_token(
     token_id: int,
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_db),
 ):
     """Delete a token.
 
@@ -327,14 +333,13 @@ async def delete_token(
 # TokenChainSupport Endpoints
 # ============================================================================
 
-@router.get(
-    "/token-chain-supports", response_model=list[TokenChainSupportWithDetails]
-)
+
+@router.get("/token-chain-supports", response_model=list[TokenChainSupportDisplay])
 async def list_token_chain_supports(
     token_id: int | None = Query(None, description="Filter by token ID"),
     chain_id: int | None = Query(None, description="Filter by chain ID"),
     is_enabled: bool | None = Query(None, description="Filter by enabled status"),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_db),
 ):
     """List token-chain support configurations."""
     query = select(TokenChainSupport, Token, Chain).join(Token).join(Chain)
@@ -353,10 +358,22 @@ async def list_token_chain_supports(
 
     supports = []
     for support, token, chain in supports_data:
-        support_dict = support.model_dump()
-        support_dict["token"] = token
-        support_dict["chain"] = chain
-        supports.append(support_dict)
+        supports.append(
+            {
+                "id": support.id,
+                "token_code": token.code,
+                "chain_code": chain.code,
+                "contract_address": support.contract_address,
+                "decimals": support.decimals or token.decimals,
+                "is_native": support.is_native,
+                "is_enabled": support.is_enabled,
+                "min_deposit": support.min_deposit,
+                "min_withdrawal": support.min_withdrawal,
+                "withdrawal_fee": support.withdrawal_fee,
+                "created_at": support.created_at,
+                "updated_at": support.updated_at,
+            }
+        )
 
     return supports
 
@@ -364,7 +381,7 @@ async def list_token_chain_supports(
 @router.post("/token-chain-supports", response_model=TokenChainSupportResponse)
 async def create_token_chain_support(
     support_data: TokenChainSupportCreate,
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_db),
 ):
     """Add token support on a specific chain.
 
@@ -386,10 +403,7 @@ async def create_token_chain_support(
         .where(TokenChainSupport.chain_id == support_data.chain_id)
     )
     if existing.scalars().first():
-        raise HTTPException(
-            status_code=400,
-            detail="Token-chain support already exists"
-        )
+        raise HTTPException(status_code=400, detail="Token-chain support already exists")
 
     support = TokenChainSupport(**support_data.model_dump())
     session.add(support)
@@ -402,7 +416,7 @@ async def create_token_chain_support(
 async def update_token_chain_support(
     support_id: int,
     support_data: TokenChainSupportUpdate,
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_db),
 ):
     """Update token-chain support configuration.
 
@@ -418,6 +432,7 @@ async def update_token_chain_support(
         setattr(support, field, value)
 
     from datetime import datetime
+
     support.updated_at = datetime.utcnow()
 
     await session.commit()
@@ -428,7 +443,7 @@ async def update_token_chain_support(
 @router.delete("/token-chain-supports/{support_id}")
 async def delete_token_chain_support(
     support_id: int,
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_db),
 ):
     """Remove token support from a chain.
 

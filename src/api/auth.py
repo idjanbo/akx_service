@@ -54,6 +54,28 @@ class ClerkAuth:
                 detail=f"Authentication failed: {e!s}",
             ) from e
 
+    def get_user_email(self, clerk_id: str) -> str:
+        """Fetch user email from Clerk API.
+
+        Args:
+            clerk_id: Clerk user ID (e.g., user_xxx)
+
+        Returns:
+            User's primary email address
+        """
+        try:
+            user = self._client.users.get(user_id=clerk_id)
+            # Return primary email or first available email
+            if user.email_addresses:
+                primary = next(
+                    (e for e in user.email_addresses if e.id == user.primary_email_address_id),
+                    user.email_addresses[0],
+                )
+                return primary.email_address
+            return ""
+        except Exception:
+            return ""
+
 
 # Singleton instance
 _clerk_auth: ClerkAuth | None = None
@@ -95,8 +117,8 @@ async def get_current_user(
     user = result.scalar_one_or_none()
 
     if not user:
-        # Sync user from Clerk to local DB
-        email = claims.get("email", "")
+        # Sync user from Clerk to local DB - fetch email from Clerk API
+        email = clerk.get_user_email(clerk_id)
         user = User(
             clerk_id=clerk_id,
             email=email,
@@ -106,6 +128,14 @@ async def get_current_user(
         db.add(user)
         await db.commit()
         await db.refresh(user)
+    elif not user.email:
+        # Update email if missing (for existing users)
+        email = clerk.get_user_email(clerk_id)
+        if email:
+            user.email = email
+            db.add(user)
+            await db.commit()
+            await db.refresh(user)
 
     if not user.is_active:
         raise HTTPException(
@@ -116,7 +146,7 @@ async def get_current_user(
     return user
 
 
-async def require_role(*roles: UserRole):
+def require_role(*roles: UserRole):
     """Factory for role-based access control dependency.
 
     Usage:
@@ -138,9 +168,15 @@ async def require_role(*roles: UserRole):
     return role_checker
 
 
-# Convenience dependencies
-RequireAdmin = Depends(require_role(UserRole.SUPER_ADMIN))
-RequireMerchant = Depends(require_role(UserRole.MERCHANT, UserRole.SUPER_ADMIN))
+# Convenience dependency factories (use with Depends())
+def require_admin():
+    """Require super admin role."""
+    return require_role(UserRole.SUPER_ADMIN)
+
+
+def require_merchant():
+    """Require merchant or super admin role."""
+    return require_role(UserRole.MERCHANT, UserRole.SUPER_ADMIN)
 
 
 # FastAPI Router

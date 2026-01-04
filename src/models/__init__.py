@@ -1,6 +1,7 @@
 """Models module - SQLModel database entities."""
 
 from src.models.chain import Chain
+from src.models.fee_config import FeeConfig
 from src.models.token import Token, TokenChainSupport
 from src.models.user import User, UserRole
 from src.models.wallet import (
@@ -15,6 +16,8 @@ __all__ = [
     # User
     "User",
     "UserRole",
+    # Fee Config
+    "FeeConfig",
     # Chain & Token (New)
     "Chain",
     "Token",

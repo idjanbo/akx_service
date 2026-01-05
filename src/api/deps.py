@@ -99,13 +99,13 @@ def totp_required(func: Callable) -> Callable:
         data = kwargs.get("data")
 
         if not user:
-            raise HTTPException(status_code=400, detail="缺少用户信息")
+            raise HTTPException(status_code=400, detail="Missing user information")
         if not data:
-            raise HTTPException(status_code=400, detail="缺少请求数据")
+            raise HTTPException(status_code=400, detail="Missing request data")
 
         totp_code = getattr(data, "totp_code", None)
         if not totp_code:
-            raise HTTPException(status_code=400, detail="缺少 TOTP 验证码")
+            raise HTTPException(status_code=400, detail="Missing TOTP code")
 
         require_totp_code(user, totp_code)
         return await func(*args, **kwargs)

@@ -131,7 +131,7 @@ async def get_order(
     """Get order details by ID."""
     order = await service.get_order(user, order_id)
     if not order:
-        raise HTTPException(status_code=404, detail="订单不存在")
+        raise HTTPException(status_code=404, detail="Order not found")
     return OrderResponse(**order)
 
 
@@ -144,7 +144,7 @@ async def get_order_by_no(
     """Get order details by order number."""
     order = await service.get_order_by_no(user, order_no)
     if not order:
-        raise HTTPException(status_code=404, detail="订单不存在")
+        raise HTTPException(status_code=404, detail="Order not found")
     return OrderResponse(**order)
 
 

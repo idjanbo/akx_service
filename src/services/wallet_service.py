@@ -3,6 +3,7 @@
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 from sqlmodel import select
 
 from src.core.security import get_cipher
@@ -34,6 +35,8 @@ class WalletService:
     ) -> PaginatedResult[dict[str, Any]]:
         """List wallets with filters and pagination.
 
+        Uses JOINs to avoid N+1 queries.
+
         Args:
             user: Current user (for role-based filtering)
             params: Pagination parameters
@@ -45,7 +48,15 @@ class WalletService:
         Returns:
             Paginated wallet list with related data
         """
-        query = select(Wallet)
+        # Use eager loading with JOINs to avoid N+1 queries
+        query = (
+            select(Wallet)
+            .options(
+                selectinload(Wallet.chain),
+                selectinload(Wallet.token),
+                selectinload(Wallet.user),
+            )
+        )
 
         # Role-based filtering
         if user.role == UserRole.MERCHANT:
@@ -69,13 +80,8 @@ class WalletService:
         # Paginate
         wallets, total = await paginate_query(self.db, query, params)
 
-        # Get related data
-        chain_names = await self._get_chain_names([w.chain_id for w in wallets])
-        token_symbols = await self._get_token_symbols([w.token_id for w in wallets if w.token_id])
-        user_names = await self._get_user_names([w.user_id for w in wallets if w.user_id])
-
-        # Build response items
-        items = [self._wallet_to_dict(w, chain_names, token_symbols, user_names) for w in wallets]
+        # Build response items directly from loaded relationships
+        items = [self._wallet_to_dict_v2(w) for w in wallets]
 
         return PaginatedResult(
             items=items,
@@ -475,7 +481,7 @@ class WalletService:
         token_symbols: dict[int, str],
         user_names: dict[int, str],
     ) -> dict[str, Any]:
-        """Convert wallet to response dict."""
+        """Convert wallet to response dict (legacy, uses pre-fetched dicts)."""
         return {
             "id": wallet.id,
             "chain_id": wallet.chain_id,
@@ -489,6 +495,26 @@ class WalletService:
             "balance": wallet.balance or None,
             "merchant_id": wallet.user_id,
             "merchant_name": user_names.get(wallet.user_id) if wallet.user_id else None,
+            "remark": wallet.label,
+            "is_active": wallet.is_active,
+            "created_at": wallet.created_at.isoformat() if wallet.created_at else "",
+        }
+
+    def _wallet_to_dict_v2(self, wallet: Wallet) -> dict[str, Any]:
+        """Convert wallet to response dict using eager-loaded relationships."""
+        return {
+            "id": wallet.id,
+            "chain_id": wallet.chain_id,
+            "chain_name": wallet.chain.name if wallet.chain else "Unknown",
+            "token_id": wallet.token_id,
+            "token_symbol": wallet.token.symbol if wallet.token else None,
+            "address": wallet.address,
+            "source": "SYSTEM_GENERATED"
+            if wallet.wallet_type == WalletType.DEPOSIT
+            else "MANUAL_IMPORT",
+            "balance": wallet.balance or None,
+            "merchant_id": wallet.user_id,
+            "merchant_name": wallet.user.email if wallet.user else None,
             "remark": wallet.label,
             "is_active": wallet.is_active,
             "created_at": wallet.created_at.isoformat() if wallet.created_at else "",

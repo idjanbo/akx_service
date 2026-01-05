@@ -158,15 +158,15 @@ class OrderService:
         """
         # Only admin/support can retry callbacks
         if user.role == UserRole.MERCHANT:
-            raise ValueError("无权限执行此操作")
+            raise ValueError("Permission denied")
 
         order = await self.db.get(Order, order_id)
         if not order:
-            raise ValueError("订单不存在")
+            raise ValueError("Order not found")
 
         # Only completed orders can have callbacks retried
         if order.status not in [OrderStatus.SUCCESS, OrderStatus.FAILED]:
-            raise ValueError("订单状态不支持重发回调")
+            raise ValueError("Order status does not support callback retry")
 
         # Reset callback status
         order.callback_status = CallbackStatus.PENDING
@@ -209,17 +209,17 @@ class OrderService:
         """
         # Guest users cannot force complete
         if user.role == UserRole.GUEST:
-            raise ValueError("无权限执行此操作")
+            raise ValueError("Permission denied")
 
         order = await self.db.get(Order, order_id)
         if not order:
-            raise ValueError("订单不存在")
+            raise ValueError("Order not found")
 
         # Permission check: super_admin can complete any order,
         # merchant/support can only complete their own orders
         if user.role != UserRole.SUPER_ADMIN:
             if order.merchant_id != user.id:
-                raise ValueError("无权限操作此订单，只能补单自己的订单")
+                raise ValueError("Permission denied: can only force complete own orders")
 
         # Update order
         old_status = order.status

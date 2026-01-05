@@ -1,20 +1,18 @@
-"""User management API routes."""
+"""User management API routes.
+
+Provides REST API endpoints for user management.
+Business logic is delegated to UserService.
+"""
 
 import math
-from datetime import datetime
 from typing import Annotated
 
-import pyotp
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
-from sqlmodel import select
 
 from src.api.auth import require_admin
 from src.db import get_db
-from src.models.fee_config import FeeConfig
-from src.models.user import User, UserRole, generate_api_key
+from src.models.user import User, UserRole
 from src.schemas.user import (
     PaginatedResponse,
     ResetGoogleSecretResponse,
@@ -26,30 +24,26 @@ from src.schemas.user import (
     UpdateUserStatusRequest,
     UserResponse,
 )
+from src.services.user_service import UserService
+from src.utils.pagination import PaginationParams
 
 router = APIRouter(prefix="/users", tags=["users"])
 
 
-async def _get_user_or_404(db: AsyncSession, user_id: int) -> User:
-    """Get user by ID or raise 404."""
-    result = await db.execute(
-        select(User)
-        .options(selectinload(User.fee_config))
-        .where(User.id == user_id)
-        .where(User.role != UserRole.SUPER_ADMIN)
-    )
-    user = result.scalar_one_or_none()
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found",
-        )
-    return user
+# ============ Dependency ============
+
+
+def get_user_service(db: Annotated[AsyncSession, Depends(get_db)]) -> UserService:
+    """Create UserService instance."""
+    return UserService(db)
+
+
+# ============ API Endpoints ============
 
 
 @router.get("", response_model=PaginatedResponse[UserResponse])
 async def list_users(
-    db: Annotated[AsyncSession, Depends(get_db)],
+    service: Annotated[UserService, Depends(get_user_service)],
     current_user: Annotated[User, Depends(require_admin())],
     page: int = Query(default=1, ge=1, description="Page number"),
     page_size: int = Query(default=20, ge=1, le=100, description="Items per page"),
@@ -72,38 +66,21 @@ async def list_users(
     Returns:
         Paginated list of users with metadata
     """
-    # Build base query
-    query = (
-        select(User).options(selectinload(User.fee_config)).where(User.role != UserRole.SUPER_ADMIN)
+    params = PaginationParams(page=page, page_size=page_size)
+    result = await service.list_users(
+        params=params,
+        search=search,
+        role=role,
+        is_active=is_active,
     )
 
-    # Apply filters
-    if search:
-        query = query.where(User.email.ilike(f"%{search}%"))
-    if role is not None:
-        query = query.where(User.role == role)
-    if is_active is not None:
-        query = query.where(User.is_active == is_active)
-
-    # Count total
-    count_query = select(func.count()).select_from(query.subquery())
-    total_result = await db.execute(count_query)
-    total = total_result.scalar() or 0
-
-    # Calculate pagination
-    total_pages = math.ceil(total / page_size) if total > 0 else 1
-    offset = (page - 1) * page_size
-
-    # Fetch paginated results
-    query = query.order_by(User.created_at.desc()).offset(offset).limit(page_size)
-    result = await db.execute(query)
-    users = result.scalars().all()
+    total_pages = math.ceil(result.total / page_size) if result.total > 0 else 1
 
     return PaginatedResponse(
-        items=[UserResponse.model_validate(u) for u in users],
-        total=total,
-        page=page,
-        page_size=page_size,
+        items=[UserResponse.model_validate(u) for u in result.items],
+        total=result.total,
+        page=result.page,
+        page_size=result.page_size,
         total_pages=total_pages,
     )
 
@@ -111,36 +88,31 @@ async def list_users(
 @router.get("/{user_id}", response_model=UserResponse)
 async def get_user(
     user_id: int,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    service: Annotated[UserService, Depends(get_user_service)],
     current_user: Annotated[User, Depends(require_admin())],
 ) -> User:
     """Get a single user by ID (admin only)."""
-    return await _get_user_or_404(db, user_id)
+    user = await service.get_user(user_id)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    return user
 
 
 @router.patch("/{user_id}/role", response_model=UserResponse)
 async def update_user_role(
     user_id: int,
     request: UpdateUserRoleRequest,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    service: Annotated[UserService, Depends(get_user_service)],
     current_user: Annotated[User, Depends(require_admin())],
 ) -> User:
     """Update user role (admin only)."""
-    user = await _get_user_or_404(db, user_id)
+    try:
+        user = await service.update_user_role(user_id, request.role)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
-    # Cannot set role to super_admin
-    if request.role == UserRole.SUPER_ADMIN:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Cannot assign super_admin role",
-        )
-
-    user.role = request.role
-    user.updated_at = datetime.utcnow()
-    db.add(user)
-    await db.commit()
-    await db.refresh(user)
-
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     return user
 
 
@@ -148,18 +120,13 @@ async def update_user_role(
 async def update_user_status(
     user_id: int,
     request: UpdateUserStatusRequest,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    service: Annotated[UserService, Depends(get_user_service)],
     current_user: Annotated[User, Depends(require_admin())],
 ) -> User:
     """Update user active status (admin only)."""
-    user = await _get_user_or_404(db, user_id)
-
-    user.is_active = request.is_active
-    user.updated_at = datetime.utcnow()
-    db.add(user)
-    await db.commit()
-    await db.refresh(user)
-
+    user = await service.update_user_status(user_id, request.is_active)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     return user
 
 
@@ -167,18 +134,13 @@ async def update_user_status(
 async def update_user_balance(
     user_id: int,
     request: UpdateUserBalanceRequest,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    service: Annotated[UserService, Depends(get_user_service)],
     current_user: Annotated[User, Depends(require_admin())],
 ) -> User:
     """Update user balance (admin only)."""
-    user = await _get_user_or_404(db, user_id)
-
-    user.balance = request.balance
-    user.updated_at = datetime.utcnow()
-    db.add(user)
-    await db.commit()
-    await db.refresh(user)
-
+    user = await service.update_user_balance(user_id, request.balance)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     return user
 
 
@@ -186,24 +148,17 @@ async def update_user_balance(
 async def update_user_credit_limit(
     user_id: int,
     request: UpdateUserCreditLimitRequest,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    service: Annotated[UserService, Depends(get_user_service)],
     current_user: Annotated[User, Depends(require_admin())],
 ) -> User:
     """Update user credit limit (admin only)."""
-    user = await _get_user_or_404(db, user_id)
+    try:
+        user = await service.update_user_credit_limit(user_id, request.credit_limit)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
-    if request.credit_limit < 0:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Credit limit cannot be negative",
-        )
-
-    user.credit_limit = request.credit_limit
-    user.updated_at = datetime.utcnow()
-    db.add(user)
-    await db.commit()
-    await db.refresh(user)
-
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     return user
 
 
@@ -211,85 +166,54 @@ async def update_user_credit_limit(
 async def update_user_fee_config(
     user_id: int,
     request: UpdateUserFeeConfigRequest,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    service: Annotated[UserService, Depends(get_user_service)],
     current_user: Annotated[User, Depends(require_admin())],
 ) -> User:
     """Update user fee configuration (admin only)."""
-    user = await _get_user_or_404(db, user_id)
+    try:
+        user = await service.update_user_fee_config(user_id, request.fee_config_id)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
 
-    if request.fee_config_id is not None:
-        # Verify fee config exists
-        result = await db.execute(select(FeeConfig).where(FeeConfig.id == request.fee_config_id))
-        fee_config = result.scalar_one_or_none()
-        if not fee_config:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Fee config not found",
-            )
-
-    user.fee_config_id = request.fee_config_id
-    user.updated_at = datetime.utcnow()
-    db.add(user)
-    await db.commit()
-    await db.refresh(user)
-
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     return user
 
 
 @router.post("/{user_id}/reset-deposit-key", response_model=ResetKeyResponse)
 async def reset_deposit_key(
     user_id: int,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    service: Annotated[UserService, Depends(get_user_service)],
     current_user: Annotated[User, Depends(require_admin())],
 ) -> ResetKeyResponse:
     """Reset user deposit API key (admin only)."""
-    user = await _get_user_or_404(db, user_id)
-
-    new_key = generate_api_key()
-    user.deposit_key = new_key
-    user.updated_at = datetime.utcnow()
-    db.add(user)
-    await db.commit()
-
+    new_key = await service.reset_deposit_key(user_id)
+    if not new_key:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     return ResetKeyResponse(key=new_key)
 
 
 @router.post("/{user_id}/reset-withdraw-key", response_model=ResetKeyResponse)
 async def reset_withdraw_key(
     user_id: int,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    service: Annotated[UserService, Depends(get_user_service)],
     current_user: Annotated[User, Depends(require_admin())],
 ) -> ResetKeyResponse:
     """Reset user withdrawal API key (admin only)."""
-    user = await _get_user_or_404(db, user_id)
-
-    new_key = generate_api_key()
-    user.withdraw_key = new_key
-    user.updated_at = datetime.utcnow()
-    db.add(user)
-    await db.commit()
-
+    new_key = await service.reset_withdraw_key(user_id)
+    if not new_key:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     return ResetKeyResponse(key=new_key)
 
 
 @router.post("/{user_id}/reset-google-secret", response_model=ResetGoogleSecretResponse)
 async def reset_google_secret(
     user_id: int,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    service: Annotated[UserService, Depends(get_user_service)],
     current_user: Annotated[User, Depends(require_admin())],
 ) -> ResetGoogleSecretResponse:
     """Reset user Google authenticator secret (admin only)."""
-    user = await _get_user_or_404(db, user_id)
-
-    # Generate new TOTP secret
-    secret = pyotp.random_base32()
-    user.google_secret = secret
-    user.updated_at = datetime.utcnow()
-    db.add(user)
-    await db.commit()
-
-    # Generate QR code URI
-    totp = pyotp.TOTP(secret)
-    qr_uri = totp.provisioning_uri(name=user.email, issuer_name="AKX Payment")
-
-    return ResetGoogleSecretResponse(secret=secret, qr_uri=qr_uri)
+    result = await service.reset_google_secret(user_id)
+    if not result:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    return ResetGoogleSecretResponse(secret=result["secret"], qr_uri=result["qr_uri"])

@@ -59,41 +59,166 @@ ETH_RPC_URL=https://mainnet.infura.io/v3/xxx
 SOLANA_RPC_URL=https://api.mainnet-beta.solana.com
 ```
 
-## Architecture: Modular Monolith
+## Architecture: Modular Monolith with Service Layer
+
+项目采用**三层架构**：API → Service → Model
+
 ```
 /src
-  /api              # Routes by domain (auth, merchant, admin, webhook)
-  /core             # Config, AES encryption, exceptions
-  /db               # Async MySQL engine setup
-  /models           # SQLModel entities
-  /schemas          # Pydantic DTOs
-  /services         # Business logic layer
-  /chains           # Blockchain abstraction (factory pattern)
-  /workers          # Celery tasks (block scanner, sweeper, webhook retry)
+  /api              # API 路由层 - 处理 HTTP 请求/响应，参数验证
+  /services         # 业务逻辑层 - 核心业务逻辑，可复用
+  /utils            # 工具函数层 - 通用辅助函数
+  /models           # 数据模型层 - SQLModel 实体定义
+  /schemas          # Pydantic DTOs - 请求/响应数据结构
+  /core             # 核心配置 - Config, AES encryption, exceptions
+  /db               # 数据库配置 - Async MySQL engine setup
+  /scripts          # 独立脚本 - 初始化、数据迁移等
 ```
 
-## Background Tasks (Celery)
-```bash
-# Start all workers
-uv run celery -A src.workers.celery_app worker -l info
+### 目录结构详解
 
-# Start beat scheduler (periodic tasks)
-uv run celery -A src.workers.celery_app beat -l info
-
-# Start workers per chain (production)
-uv run celery -A src.workers.celery_app worker -Q tron -l info -c 1
-uv run celery -A src.workers.celery_app worker -Q ethereum -l info -c 1
-uv run celery -A src.workers.celery_app worker -Q solana -l info -c 1
-uv run celery -A src.workers.celery_app worker -Q common -l info -c 2
+```
+src/
+├── api/                    # API 路由层
+│   ├── __init__.py
+│   ├── auth.py            # 认证中间件 (Clerk JWT)
+│   ├── wallets.py         # 钱包 API 端点
+│   ├── payment_channels.py # 支付通道 API 端点
+│   ├── chains_tokens.py   # 链和代币 API 端点
+│   ├── fee_configs.py     # 费率配置 API 端点
+│   ├── users.py           # 用户管理 API 端点
+│   └── totp.py            # TOTP 验证 API 端点
+│
+├── services/              # 业务逻辑层
+│   ├── __init__.py
+│   ├── wallet_service.py      # 钱包业务逻辑
+│   ├── channel_service.py     # 支付通道业务逻辑
+│   ├── chain_token_service.py # 链和代币业务逻辑
+│   ├── fee_config_service.py  # 费率配置业务逻辑
+│   └── user_service.py        # 用户管理业务逻辑
+│
+├── utils/                 # 工具函数层
+│   ├── __init__.py
+│   ├── crypto.py          # 加密相关工具 (钱包生成、地址验证)
+│   ├── pagination.py      # 分页工具
+│   └── helpers.py         # 通用辅助函数
+│
+├── models/                # SQLModel 实体
+├── schemas/               # Pydantic DTOs
+├── core/                  # 核心配置
+├── db/                    # 数据库配置
+└── scripts/               # 独立脚本 (init_chains_tokens.py, init_fee_configs.py 等)
 ```
 
-Tasks are defined in `src/workers/chain_scanners/` and `src/workers/common_tasks.py`:
-- `scan_tron_blocks` - Every 10 seconds (queue: tron)
-- `scan_ethereum_blocks` - Every 15 seconds (queue: ethereum)
-- `scan_solana_blocks` - Every 5 seconds (queue: solana)
-- `sweep_funds` - Every 5 minutes (queue: common)
-- `retry_webhooks` - Every 60 seconds (queue: common)
-- `process_withdrawals` - Every 30 seconds (queue: common)
+## 代码分层规范 (重要)
+
+### API 层 (api/*.py)
+**职责**：
+- HTTP 请求/响应处理
+- 参数验证 (Pydantic)
+- 错误转换 (ValueError → HTTPException)
+- 权限检查依赖注入
+
+**规范**：
+```python
+# ✅ 正确：API 层只处理 HTTP 相关逻辑
+@router.get("/{wallet_id}")
+async def get_wallet(
+    wallet_id: int,
+    user: Annotated[User, Depends(get_current_user)],
+    service: Annotated[WalletService, Depends(get_wallet_service)],
+) -> WalletResponse:
+    result = await service.get_wallet(wallet_id, user)
+    if not result:
+        raise HTTPException(status_code=404, detail="Wallet not found")
+    return WalletResponse(**result)
+
+# ❌ 错误：API 层不应该包含业务逻辑
+@router.get("/{wallet_id}")
+async def get_wallet(wallet_id: int, db: AsyncSession = Depends(get_db)):
+    wallet = await db.get(Wallet, wallet_id)
+    # 大量业务逻辑代码...
+```
+
+### Service 层 (services/*.py)
+**职责**：
+- 核心业务逻辑
+- 数据库操作
+- 跨模型协调
+- 返回领域对象或字典
+
+**规范**：
+```python
+class WalletService:
+    def __init__(self, db: AsyncSession):
+        self.db = db
+
+    async def get_wallet(self, wallet_id: int, user: User) -> dict | None:
+        """获取钱包 - 业务逻辑在这里"""
+        wallet = await self.db.get(Wallet, wallet_id)
+        if not wallet:
+            return None
+        
+        # 权限检查是业务逻辑
+        if user.role == UserRole.MERCHANT and wallet.user_id != user.id:
+            return None
+        
+        # 组装返回数据
+        return self._wallet_to_dict(wallet)
+
+    async def generate_wallets(self, user: User, chain_id: int, count: int):
+        """生成钱包 - 抛出 ValueError 表示业务错误"""
+        chain = await self.db.get(Chain, chain_id)
+        if not chain:
+            raise ValueError(f"Chain {chain_id} not found")
+        # ...
+```
+
+### Utils 层 (utils/*.py)
+**职责**：
+- 无状态工具函数
+- 不依赖数据库
+- 可跨 Service 复用
+
+**规范**：
+```python
+# utils/crypto.py
+def generate_wallet_for_chain(chain_code: str) -> tuple[str, str]:
+    """生成钱包地址和私钥 - 纯函数，无副作用"""
+    ...
+
+def validate_address_for_chain(chain_code: str, address: str) -> bool:
+    """验证地址格式 - 纯函数"""
+    ...
+
+# utils/pagination.py
+@dataclass
+class PaginationParams:
+    page: int = 1
+    page_size: int = 20
+
+async def paginate_query(db: AsyncSession, query: Select, params: PaginationParams):
+    """通用分页函数"""
+    ...
+```
+
+## Service 依赖注入
+
+在 API 层使用 FastAPI 依赖注入创建 Service 实例：
+
+```python
+# api/wallets.py
+def get_wallet_service(db: Annotated[AsyncSession, Depends(get_db)]) -> WalletService:
+    """创建 WalletService 实例"""
+    return WalletService(db)
+
+@router.get("")
+async def list_wallets(
+    user: Annotated[User, Depends(get_current_user)],
+    service: Annotated[WalletService, Depends(get_wallet_service)],
+):
+    return await service.list_wallets(user, ...)
+```
 
 ## Critical Patterns
 
@@ -115,10 +240,9 @@ Tasks are defined in `src/workers/chain_scanners/` and `src/workers/common_tasks
 - Request timestamp must be within 5 minutes
 
 ### Blockchain Integration (TRON First)
-- Use `/chains/base.py` as `ChainInterface` abstract class
-- **Priority**: Implement TRON first (`/chains/tron.py` with `tronpy`)
 - TRON requires 19 confirmations for finality
 - USDT-TRC20 contract: `TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t` (mainnet)
+- **TODO**: 实现 `/chains/` 区块链抽象层 (base.py, tron.py)
 
 ### Order State Machine
 Withdrawal states: `PENDING -> PROCESSING -> SUCCESS/FAILED`
@@ -184,22 +308,41 @@ from src.db.engine import get_db_for_script  # 不存在！
 - `celery` - Task queue (Redis)
 
 ## Key Files (update as implemented)
+
+### Core Infrastructure
 - `src/core/security.py` - AES encryption utilities
 - `src/core/config.py` - Pydantic Settings configuration
 - `src/db/engine.py` - Async MySQL engine + session factory
-- `src/chains/base.py` - ChainInterface abstract class
-- `src/chains/tron.py` - TRON chain implementation
-- `src/models/` - SQLModel definitions (User, Wallet, Order, Transaction, Webhook, FeeConfig, Merchant)
+
+### Services (业务逻辑层)
+- `src/services/wallet_service.py` - 钱包业务逻辑 (生成、导入、查询、资产汇总)
+- `src/services/channel_service.py` - 支付通道业务逻辑 (CRUD、可用通道查询)
+- `src/services/chain_token_service.py` - 链和代币业务逻辑 (CRUD、链代币关联)
+- `src/services/fee_config_service.py` - 费率配置业务逻辑 (CRUD、费率计算)
+- `src/services/user_service.py` - 用户管理业务逻辑 (CRUD、密钥重置、TOTP)
+
+### Utils (工具函数)
+- `src/utils/crypto.py` - 加密工具 (钱包生成、地址验证)
+- `src/utils/pagination.py` - 分页工具 (PaginationParams、paginate_query)
+- `src/utils/helpers.py` - 通用辅助函数
+
+### API Routes
 - `src/api/auth.py` - Clerk JWT verification + user sync
-- `src/api/payment.py` - Payment API (deposit/withdraw/query)
-- `src/api/merchant.py` - Merchant REST API endpoints
-- `src/api/admin.py` - Admin dashboard + system management
-- `src/api/webhook.py` - Webhook configuration endpoints
-- `src/services/wallet_service.py` - Wallet generation + encryption
-- `src/services/order_service.py` - Order management + ledger
-- `src/services/webhook_service.py` - Webhook delivery + retries
-- `src/workers/celery_app.py` - Celery configuration
-- `src/workers/chain_scanners/` - Per-chain block scanners
-- `src/workers/common_tasks.py` - Common background tasks
-- `src/workers/sweeper.py` - Fund collection worker
+- `src/api/wallets.py` - 钱包 API 端点
+- `src/api/payment_channels.py` - 支付通道 API 端点
+- `src/api/chains_tokens.py` - 链和代币 API 端点
+- `src/api/fee_configs.py` - 费率配置 API 端点
+- `src/api/users.py` - 用户管理 API 端点
+- `src/api/totp.py` - TOTP 验证 API 端点
+
+### Models
+- `src/models/` - SQLModel definitions (User, Wallet, Chain, Token, PaymentChannel, FeeConfig)
+
+### Scripts
+- `src/scripts/init_chains_tokens.py` - 初始化链和代币数据
+- `src/scripts/init_fee_configs.py` - 初始化费率配置
+- `src/scripts/update_chain_codes.py` - 更新链代码
+
+### Documentation
 - `docs/PAYMENT_API.md` - Payment API documentation
+- `docs/CHAIN_TOKEN_SYSTEM.md` - 链和代币系统文档

@@ -49,13 +49,10 @@ class WalletService:
             Paginated wallet list with related data
         """
         # Use eager loading with JOINs to avoid N+1 queries
-        query = (
-            select(Wallet)
-            .options(
-                selectinload(Wallet.chain),
-                selectinload(Wallet.token),
-                selectinload(Wallet.user),
-            )
+        query = select(Wallet).options(
+            selectinload(Wallet.chain),
+            selectinload(Wallet.token),
+            selectinload(Wallet.user),
         )
 
         # Role-based filtering

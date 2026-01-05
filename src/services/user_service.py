@@ -277,7 +277,7 @@ class UserService:
             return None
 
         secret = pyotp.random_base32()
-        
+
         # Encrypt the secret before storing (marked as pending until enabled)
         cipher = _get_cipher()
         encrypted_secret = cipher.encrypt(f"pending:{secret}")

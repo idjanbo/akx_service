@@ -55,7 +55,9 @@ class UserService:
         )
 
         if search:
-            query = query.where(User.email.ilike(f"%{search}%"))
+            # Escape special LIKE characters to prevent pattern injection
+            escaped = search.replace("%", r"\%").replace("_", r"\_")
+            query = query.where(User.email.ilike(f"%{escaped}%"))
         if role is not None:
             query = query.where(User.role == role)
         if is_active is not None:

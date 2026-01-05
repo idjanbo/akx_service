@@ -116,3 +116,16 @@ class ResetGoogleSecretResponse(BaseModel):
 
     secret: str
     qr_uri: str  # otpauth:// URI for QR code
+
+
+class CurrentUserResponse(BaseModel):
+    """Response for /auth/me endpoint."""
+
+    id: int
+    clerk_id: str
+    email: str
+    role: str  # String value for frontend
+    is_active: bool
+    totp_enabled: bool
+    created_at: str  # ISO format
+    updated_at: str  # ISO format

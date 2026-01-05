@@ -37,14 +37,14 @@ class PaymentError(Exception):
 class PaymentService:
     """Service for payment-related business logic."""
 
-    # Deposit order expiry in minutes
-    DEPOSIT_EXPIRY_MINUTES = 30
-
-    # Timestamp validity window in milliseconds (5 minutes)
-    TIMESTAMP_VALIDITY_MS = 5 * 60 * 1000
-
     def __init__(self, db: AsyncSession):
         self.db = db
+        # Load settings for configurable values
+        from src.core.config import get_settings
+
+        settings = get_settings()
+        self.deposit_expiry_minutes = settings.deposit_expiry_minutes
+        self.timestamp_validity_ms = settings.timestamp_validity_minutes * 60 * 1000
 
     # ============ Signature Verification ============
 
@@ -88,7 +88,7 @@ class PaymentService:
             True if timestamp is valid
         """
         current_time = int(time.time() * 1000)
-        return abs(current_time - timestamp) <= self.TIMESTAMP_VALIDITY_MS
+        return abs(current_time - timestamp) <= self.timestamp_validity_ms
 
     # ============ Merchant Authentication ============
 
@@ -352,7 +352,7 @@ class PaymentService:
                 )
 
         # Create order
-        expire_time = datetime.now(datetime.UTC) + timedelta(minutes=self.DEPOSIT_EXPIRY_MINUTES)
+        expire_time = datetime.now(datetime.UTC) + timedelta(minutes=self.deposit_expiry_minutes)
         order = Order(
             order_no=generate_order_no(OrderType.DEPOSIT),
             out_trade_no=out_trade_no,
@@ -379,7 +379,7 @@ class PaymentService:
 
         expire_order.apply_async(
             args=[order.id],
-            countdown=self.DEPOSIT_EXPIRY_MINUTES * 60,  # Convert to seconds
+            countdown=self.deposit_expiry_minutes * 60,  # Convert to seconds
         )
 
         return order

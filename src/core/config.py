@@ -61,6 +61,14 @@ class Settings(BaseSettings):
     alchemy_webhook_secret: str = Field(default="", description="Alchemy webhook signing key")
     helius_webhook_secret: str = Field(default="", description="Helius webhook auth token")
 
+    # Payment settings
+    deposit_expiry_minutes: int = Field(
+        default=30, description="Deposit order expiry time in minutes"
+    )
+    timestamp_validity_minutes: int = Field(
+        default=5, description="API request timestamp validity window in minutes"
+    )
+
 
 @lru_cache
 def get_settings() -> Settings:

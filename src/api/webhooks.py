@@ -101,7 +101,7 @@ async def tron_webhook(
 
     except Exception as e:
         logger.exception(f"TRON webhook error: {e}")
-        return {"status": "error", "message": str(e)}
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # ============ Ethereum (Alchemy) ============
@@ -187,7 +187,7 @@ async def alchemy_webhook(
         raise
     except Exception as e:
         logger.exception(f"Alchemy webhook error: {e}")
-        return {"status": "error", "message": str(e)}
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # ============ Solana (Helius) ============
@@ -270,7 +270,7 @@ async def helius_webhook(
         raise
     except Exception as e:
         logger.exception(f"Helius webhook error: {e}")
-        return {"status": "error", "message": str(e)}
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # ============ QuickNode ============
@@ -342,7 +342,7 @@ async def quicknode_webhook(
         raise
     except Exception as e:
         logger.exception(f"QuickNode webhook error: {e}")
-        return {"status": "error", "message": str(e)}
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # ============ Moralis ============
@@ -426,7 +426,7 @@ async def moralis_webhook(
         raise
     except Exception as e:
         logger.exception(f"Moralis webhook error: {e}")
-        return {"status": "error", "message": str(e)}
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # ============ Common Processing ============

@@ -123,3 +123,8 @@ def decrypt_private_key(encrypted: str) -> str:
         Clear the returned value from memory after use!
     """
     return get_cipher().decrypt(encrypted)
+
+
+# Generic aliases for sensitive data encryption
+encrypt_sensitive_data = encrypt_private_key
+decrypt_sensitive_data = decrypt_private_key

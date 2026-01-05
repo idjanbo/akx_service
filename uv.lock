@@ -128,6 +128,7 @@ source = { editable = "." }
 dependencies = [
     { name = "aiomysql" },
     { name = "alembic" },
+    { name = "base58" },
     { name = "celery" },
     { name = "clerk-backend-api" },
     { name = "coincurve" },
@@ -160,6 +161,7 @@ dev = [
 requires-dist = [
     { name = "aiomysql", specifier = ">=0.2.0" },
     { name = "alembic", specifier = ">=1.17.2" },
+    { name = "base58", specifier = ">=2.1.1" },
     { name = "celery", specifier = ">=5.6.0" },
     { name = "clerk-backend-api", specifier = ">=1.0.0" },
     { name = "coincurve", git = "https://github.com/ofek/coincurve.git" },

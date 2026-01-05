@@ -2,6 +2,7 @@
 
 from src.models.chain import Chain
 from src.models.fee_config import FeeConfig
+from src.models.order import CallbackStatus, Order, OrderStatus, OrderType
 from src.models.payment_channel import ChannelStatus, PaymentChannel
 from src.models.token import Token, TokenChainSupport
 from src.models.user import User, UserRole
@@ -12,6 +13,11 @@ from src.models.wallet import (
     WalletType,
     get_payment_method_expiry_deprecated,  # DEPRECATED
 )
+from src.models.webhook_provider import (
+    WebhookProvider,
+    WebhookProviderChain,
+    WebhookProviderType,
+)
 
 __all__ = [
     # User
@@ -19,6 +25,11 @@ __all__ = [
     "UserRole",
     # Fee Config
     "FeeConfig",
+    # Order
+    "Order",
+    "OrderType",
+    "OrderStatus",
+    "CallbackStatus",
     # Payment Channel
     "PaymentChannel",
     "ChannelStatus",
@@ -29,6 +40,10 @@ __all__ = [
     # Wallet
     "Wallet",
     "WalletType",
+    # Webhook Provider
+    "WebhookProvider",
+    "WebhookProviderChain",
+    "WebhookProviderType",
     # DEPRECATED - kept for backward compatibility
     "ChainEnum",
     "TokenEnum",

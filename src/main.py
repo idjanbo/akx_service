@@ -54,10 +54,13 @@ def create_app() -> FastAPI:
     from src.api.auth import router as auth_router
     from src.api.chains_tokens import router as chains_tokens_router
     from src.api.fee_configs import router as fee_configs_router
+    from src.api.payment import router as payment_router
     from src.api.payment_channels import router as payment_channels_router
     from src.api.totp import router as totp_router
     from src.api.users import router as users_router
     from src.api.wallets import router as wallets_router
+    from src.api.webhook_providers import router as webhook_providers_router
+    from src.api.webhooks import router as webhooks_router
 
     app.include_router(auth_router, prefix="/api", tags=["auth"])
     app.include_router(users_router, prefix="/api", tags=["users"])
@@ -66,6 +69,9 @@ def create_app() -> FastAPI:
     app.include_router(chains_tokens_router)
     app.include_router(fee_configs_router, prefix="/api")
     app.include_router(totp_router, prefix="/api", tags=["totp"])
+    app.include_router(webhook_providers_router, prefix="/api")  # Webhook provider management
+    app.include_router(payment_router)  # Payment API v1
+    app.include_router(webhooks_router)  # Blockchain webhooks (callback endpoints)
 
     @app.get("/health")
     async def health_check() -> dict[str, str]:

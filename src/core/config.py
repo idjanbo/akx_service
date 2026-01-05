@@ -53,6 +53,10 @@ class Settings(BaseSettings):
         description="Redis connection URL for task queue",
     )
 
+    # Webhook secrets (optional, for signature verification)
+    alchemy_webhook_secret: str = Field(default="", description="Alchemy webhook signing key")
+    helius_webhook_secret: str = Field(default="", description="Helius webhook auth token")
+
 
 @lru_cache
 def get_settings() -> Settings:

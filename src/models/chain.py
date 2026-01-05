@@ -7,6 +7,7 @@ from sqlmodel import Field, Relationship, SQLModel
 
 if TYPE_CHECKING:
     from src.models.token import TokenChainSupport
+    from src.models.webhook_provider import WebhookProviderChain
 
 
 class Chain(SQLModel, table=True):
@@ -23,7 +24,6 @@ class Chain(SQLModel, table=True):
         remark: Internal remarks/memo
         is_enabled: Whether this chain is currently active
         sort_order: Display order (lower numbers appear first)
-        rpc_url: RPC endpoint URL for blockchain interaction
         explorer_url: Block explorer base URL (e.g., https://tronscan.org)
         native_token: Native token symbol (e.g., 'TRX' for TRON, 'ETH' for Ethereum)
         confirmation_blocks: Required confirmations for finality
@@ -43,7 +43,6 @@ class Chain(SQLModel, table=True):
     sort_order: int = Field(default=0, description="Display order")
 
     # Chain-specific configuration
-    rpc_url: str | None = Field(default=None, max_length=500, description="RPC endpoint")
     explorer_url: str | None = Field(default=None, max_length=500, description="Block explorer URL")
     native_token: str | None = Field(default=None, max_length=20, description="Native token symbol")
     confirmation_blocks: int = Field(default=1, description="Required confirmations")
@@ -53,6 +52,7 @@ class Chain(SQLModel, table=True):
 
     # Relationships
     token_supports: list["TokenChainSupport"] = Relationship(back_populates="chain")
+    webhook_providers: list["WebhookProviderChain"] = Relationship(back_populates="chain")
 
     class Config:
         """Pydantic configuration."""
@@ -64,7 +64,6 @@ class Chain(SQLModel, table=True):
                 "description": "High-throughput blockchain supporting TRC-20 tokens",
                 "is_enabled": True,
                 "sort_order": 1,
-                "rpc_url": "https://api.trongrid.io",
                 "explorer_url": "https://tronscan.org",
                 "native_token": "TRX",
                 "confirmation_blocks": 19,

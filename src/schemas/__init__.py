@@ -7,11 +7,37 @@ from src.schemas.fee_config import (
     FeeConfigResponse,
     FeeConfigUpdate,
 )
+from src.schemas.payment import (
+    CallbackPayload,
+    CreateDepositRequest,
+    CreateDepositResponse,
+    CreateWithdrawRequest,
+    CreateWithdrawResponse,
+    OrderDetailResponse,
+    OrderTypeEnum,
+    PaymentErrorCode,
+    PaymentErrorResponse,
+    QueryOrderByOutTradeNoRequest,
+    QueryOrderRequest,
+)
 
 __all__: list[str] = [
+    # Fee Config
     "FeeConfigCreate",
     "FeeConfigUpdate",
     "FeeConfigResponse",
     "FeeCalculationRequest",
     "FeeCalculationResponse",
+    # Payment
+    "CreateDepositRequest",
+    "CreateDepositResponse",
+    "CreateWithdrawRequest",
+    "CreateWithdrawResponse",
+    "QueryOrderRequest",
+    "QueryOrderByOutTradeNoRequest",
+    "OrderDetailResponse",
+    "OrderTypeEnum",
+    "CallbackPayload",
+    "PaymentErrorResponse",
+    "PaymentErrorCode",
 ]

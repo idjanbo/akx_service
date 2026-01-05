@@ -174,6 +174,10 @@ def require_admin():
     return require_role(UserRole.SUPER_ADMIN)
 
 
+# Alias for require_admin
+require_super_admin = require_admin
+
+
 def require_merchant():
     """Require merchant or super admin role."""
     return require_role(UserRole.MERCHANT, UserRole.SUPER_ADMIN)

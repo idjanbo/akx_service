@@ -18,7 +18,6 @@ class ChainBase(BaseModel):
     remark: str | None = Field(None, description="Internal remarks", max_length=500)
     is_enabled: bool = Field(True, description="Is chain active")
     sort_order: int = Field(0, description="Display order")
-    rpc_url: str | None = Field(None, description="RPC endpoint", max_length=500)
     explorer_url: str | None = Field(None, description="Block explorer URL", max_length=500)
     native_token: str | None = Field(None, description="Native token symbol", max_length=20)
     confirmation_blocks: int = Field(1, description="Required confirmations")
@@ -39,7 +38,6 @@ class ChainUpdate(BaseModel):
     remark: str | None = Field(None, max_length=500)
     is_enabled: bool | None = None
     sort_order: int | None = None
-    rpc_url: str | None = Field(None, max_length=500)
     explorer_url: str | None = Field(None, max_length=500)
     native_token: str | None = Field(None, max_length=20)
     confirmation_blocks: int | None = None

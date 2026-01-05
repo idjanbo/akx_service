@@ -4,15 +4,17 @@
 
 AKX 支付网关提供加密货币充值和提现服务，支持多链、多币种交易。
 
-### 支持的链和币种
+### 支持的币种和链
 
-| 链 (chain) | 支持币种 (token) |
-|------------|-----------------|
-| `tron` | `usdt`, `usdc` |
-| `ethereum` | `usdt`, `usdc`, `eth` |
-| `solana` | `usdt`, `usdc`, `sol` |
+| 币种 (token) | 支持链 (chain) |
+|-------------|----------------|
+| `USDT` | `tron`, `ethereum`, `solana` |
+| `USDC` | `tron`, `ethereum`, `solana` |
+| `ETH` | `ethereum` |
+| `TRX` | `tron` |
+| `SOL` | `solana` |
 
-**重要**：支付方式由 **链 + 币种** 唯一确定。例如 TRON 链上的 USDT 和 Ethereum 链上的 USDT 是不同的支付方式。
+**重要**：支付方式由 **币种 + 链** 唯一确定。例如 TRON 链上的 USDT 和 Ethereum 链上的 USDT 是不同的支付方式。
 
 ## 接入准备
 
@@ -52,14 +54,14 @@ def generate_sign(message: str, secret_key: str) -> str:
         hashlib.sha256
     ).hexdigest()
 
-# 示例：充值签名（注意包含 token 字段）
+# 示例：充值签名
 merchant_no = "M1234567890123"
 deposit_key = "your_deposit_key_64_chars..."
 timestamp = int(time.time() * 1000)  # 毫秒时间戳
 nonce = secrets.token_hex(16)  # 32位随机字符串
 
-# 签名字段顺序：merchant_no + timestamp + nonce + merchant_ref + chain + token + amount + callback_url
-message = merchant_no + str(timestamp) + nonce + "ORDER001" + "tron" + "usdt" + "100.00" + "https://example.com/callback"
+# 签名字段顺序：merchant_no + timestamp + nonce + out_trade_no + token + chain + amount + callback_url
+message = merchant_no + str(timestamp) + nonce + "ORDER001" + "USDT" + "tron" + "100.00" + "https://example.com/callback"
 sign = generate_sign(message, deposit_key)
 ```
 
@@ -118,9 +120,9 @@ public class SignUtil {
 
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| `merchant_ref` | string | 是 | 商户订单号（最长64字符，需唯一） |
+| `out_trade_no` | string | 是 | 外部交易号（最长64字符，商户系统唯一订单号） |
+| `token` | string | 是 | 币种：`USDT` / `USDC` / `ETH` / `TRX` / `SOL` |
 | `chain` | string | 是 | 区块链网络：`tron` / `ethereum` / `solana` |
-| `token` | string | 否 | 币种：`usdt` / `usdc` / `eth` / `trx` / `sol`（默认 `usdt`） |
 | `amount` | string | 是 | 充值金额（最多8位小数） |
 | `callback_url` | string | 是 | 回调通知地址 |
 | `extra_data` | string | 否 | 附加数据（最长1024字符，回调时原样返回） |
@@ -128,7 +130,7 @@ public class SignUtil {
 ### 签名字段顺序
 
 ```
-merchant_no + timestamp + nonce + merchant_ref + chain + token + amount + callback_url
+merchant_no + timestamp + nonce + out_trade_no + token + chain + amount + callback_url
 ```
 
 ### 请求示例
@@ -138,9 +140,9 @@ merchant_no + timestamp + nonce + merchant_ref + chain + token + amount + callba
   "merchant_no": "M1234567890123",
   "timestamp": 1702345678000,
   "nonce": "abc123def456ghij7890",
-  "merchant_ref": "ORDER20231212001",
+  "out_trade_no": "ORDER20231212001",
+  "token": "USDT",
   "chain": "tron",
-  "token": "usdt",
   "amount": "100.00",
   "callback_url": "https://yoursite.com/api/callback",
   "extra_data": "{\"user_id\":12345}",
@@ -154,9 +156,9 @@ merchant_no + timestamp + nonce + merchant_ref + chain + token + amount + callba
 {
   "success": true,
   "order_no": "ORD1702345678000ABC12345",
-  "merchant_ref": "ORDER20231212001",
+  "out_trade_no": "ORDER20231212001",
+  "token": "USDT",
   "chain": "tron",
-  "token": "usdt",
   "amount": "100.00",
   "wallet_address": "TXyz...abc",
   "expire_time": "2023-12-12T12:30:00Z",
@@ -181,9 +183,9 @@ merchant_no + timestamp + nonce + merchant_ref + chain + token + amount + callba
 
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| `merchant_ref` | string | 是 | 商户订单号（最长64字符，需唯一） |
+| `out_trade_no` | string | 是 | 外部交易号（最长64字符，商户系统唯一订单号） |
+| `token` | string | 是 | 币种：`USDT` / `USDC` / `ETH` / `TRX` / `SOL` |
 | `chain` | string | 是 | 区块链网络：`tron` / `ethereum` / `solana` |
-| `token` | string | 否 | 币种：`usdt` / `usdc` / `eth` / `trx` / `sol`（默认 `usdt`） |
 | `amount` | string | 是 | 提现金额（最多8位小数） |
 | `to_address` | string | 是 | 收款钱包地址 |
 | `callback_url` | string | 是 | 回调通知地址 |
@@ -192,7 +194,7 @@ merchant_no + timestamp + nonce + merchant_ref + chain + token + amount + callba
 ### 签名字段顺序
 
 ```
-merchant_no + timestamp + nonce + merchant_ref + chain + token + amount + to_address + callback_url
+merchant_no + timestamp + nonce + out_trade_no + token + chain + amount + to_address + callback_url
 ```
 
 ### 请求示例
@@ -202,9 +204,9 @@ merchant_no + timestamp + nonce + merchant_ref + chain + token + amount + to_add
   "merchant_no": "M1234567890123",
   "timestamp": 1702345678000,
   "nonce": "xyz789abc123def456",
-  "merchant_ref": "WD20231212001",
+  "out_trade_no": "WD20231212001",
+  "token": "USDT",
   "chain": "tron",
-  "token": "usdt",
   "amount": "50.00",
   "to_address": "TLive...xyz",
   "callback_url": "https://yoursite.com/api/callback",
@@ -219,9 +221,9 @@ merchant_no + timestamp + nonce + merchant_ref + chain + token + amount + to_add
 {
   "success": true,
   "order_no": "ORD1702345678000DEF67890",
-  "merchant_ref": "WD20231212001",
+  "out_trade_no": "WD20231212001",
+  "token": "USDT",
   "chain": "tron",
-  "token": "usdt",
   "amount": "50.00",
   "fee": "1.00",
   "net_amount": "49.00",
@@ -274,21 +276,21 @@ merchant_no + timestamp + nonce + order_no
 
 ---
 
-## 4. 查询订单（按商户订单号）
+## 4. 查询订单（按外部交易号）
 
-**POST** `/api/v1/payment/order/query-by-ref`
+**POST** `/api/v1/payment/order/query-by-out-trade-no`
 
 ### 请求参数
 
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| `merchant_ref` | string | 是 | 商户订单号 |
-| `order_type` | string | 是 | 订单类型：`deposit` / `withdrawal` |
+| `out_trade_no` | string | 是 | 外部交易号 |
+| `order_type` | string | 是 | 订单类型：`deposit` / `withdraw` |
 
 ### 签名字段顺序
 
 ```
-merchant_no + timestamp + nonce + merchant_ref + order_type
+merchant_no + timestamp + nonce + out_trade_no + order_type
 ```
 
 ### 签名密钥
@@ -304,10 +306,10 @@ merchant_no + timestamp + nonce + merchant_ref + order_type
 {
   "success": true,
   "order_no": "ORD1702345678000ABC12345",
-  "merchant_ref": "ORDER20231212001",
+  "out_trade_no": "ORDER20231212001",
   "order_type": "deposit",
+  "token": "USDT",
   "chain": "tron",
-  "token": "usdt",
   "amount": "100.00",
   "fee": "0.00",
   "net_amount": "100.00",
@@ -337,10 +339,10 @@ merchant_no + timestamp + nonce + merchant_ref + order_type
 |------|------|------|
 | `merchant_no` | string | 商户编号 |
 | `order_no` | string | 系统订单号 |
-| `merchant_ref` | string | 商户订单号 |
-| `order_type` | string | 订单类型：`deposit` / `withdrawal` |
-| `chain` | string | 区块链网络 |
+| `out_trade_no` | string | 外部交易号 |
+| `order_type` | string | 订单类型：`deposit` / `withdraw` |
 | `token` | string | 币种 |
+| `chain` | string | 区块链网络 |
 | `amount` | string | 订单金额 |
 | `fee` | string | 手续费 |
 | `net_amount` | string | 净金额 |
@@ -370,10 +372,10 @@ merchant_no + order_no + status + amount
 {
   "merchant_no": "M1234567890123",
   "order_no": "ORD1702345678000ABC12345",
-  "merchant_ref": "ORDER20231212001",
+  "out_trade_no": "ORDER20231212001",
   "order_type": "deposit",
+  "token": "USDT",
   "chain": "tron",
-  "token": "usdt",
   "amount": "100.00",
   "fee": "0.00",
   "net_amount": "100.00",
@@ -439,7 +441,7 @@ def verify_callback(data: dict, deposit_key: str, withdraw_key: str) -> bool:
 | `INVALID_MERCHANT` | 无效的商户 |
 | `INVALID_SIGNATURE` | 签名验证失败 |
 | `TIMESTAMP_EXPIRED` | 请求时间戳过期 |
-| `DUPLICATE_REF` | 商户订单号重复 |
+| `DUPLICATE_REF` | 外部交易号重复 |
 | `ORDER_NOT_FOUND` | 订单不存在 |
 | `INSUFFICIENT_BALANCE` | 余额不足 |
 | `INVALID_ADDRESS` | 无效的钱包地址 |

@@ -31,6 +31,7 @@ if config.config_file_name is not None:
 # This is required for autogenerate to detect models
 from src.models.chain import Chain  # noqa: F401, E402
 from src.models.fee_config import FeeConfig  # noqa: F401, E402
+from src.models.ledger import AddressTransaction, BalanceLedger, RechargeRecord  # noqa: F401, E402
 from src.models.order import Order  # noqa: F401, E402
 from src.models.payment_channel import PaymentChannel  # noqa: F401, E402
 from src.models.token import Token, TokenChainSupport  # noqa: F401, E402

@@ -80,7 +80,6 @@ async def create_fee_config(
     """
     try:
         return await service.create_fee_config(fee_config_data.model_dump())
-        return await service.create_fee_config(fee_config_data.model_dump())
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 

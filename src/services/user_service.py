@@ -1,6 +1,6 @@
 """User Service - Business logic for user management."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 
 import pyotp
@@ -9,9 +9,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlmodel import select
 
+from src.core.config import get_settings
+from src.core.security import AESCipher
 from src.models.fee_config import FeeConfig
 from src.models.user import User, UserRole, generate_api_key
 from src.utils.pagination import PaginatedResult, PaginationParams
+
+
+def _get_cipher() -> AESCipher:
+    """Get AES cipher for encrypting/decrypting secrets."""
+    settings = get_settings()
+    return AESCipher(settings.aes_encryption_key)
 
 
 class UserService:
@@ -109,7 +117,7 @@ class UserService:
             return None
 
         user.role = role
-        user.updated_at = datetime.utcnow()
+        user.updated_at = datetime.now(timezone.utc)
         self.db.add(user)
         await self.db.commit()
         await self.db.refresh(user)
@@ -130,7 +138,7 @@ class UserService:
             return None
 
         user.is_active = is_active
-        user.updated_at = datetime.utcnow()
+        user.updated_at = datetime.now(timezone.utc)
         self.db.add(user)
         await self.db.commit()
         await self.db.refresh(user)
@@ -151,7 +159,7 @@ class UserService:
             return None
 
         user.balance = balance
-        user.updated_at = datetime.utcnow()
+        user.updated_at = datetime.now(timezone.utc)
         self.db.add(user)
         await self.db.commit()
         await self.db.refresh(user)
@@ -178,7 +186,7 @@ class UserService:
             return None
 
         user.credit_limit = credit_limit
-        user.updated_at = datetime.utcnow()
+        user.updated_at = datetime.now(timezone.utc)
         self.db.add(user)
         await self.db.commit()
         await self.db.refresh(user)
@@ -207,7 +215,7 @@ class UserService:
                 raise ValueError("Fee config not found")
 
         user.fee_config_id = fee_config_id
-        user.updated_at = datetime.utcnow()
+        user.updated_at = datetime.now(timezone.utc)
         self.db.add(user)
         await self.db.commit()
         await self.db.refresh(user)
@@ -228,7 +236,7 @@ class UserService:
 
         new_key = generate_api_key()
         user.deposit_key = new_key
-        user.updated_at = datetime.utcnow()
+        user.updated_at = datetime.now(timezone.utc)
         self.db.add(user)
         await self.db.commit()
         return new_key
@@ -248,7 +256,7 @@ class UserService:
 
         new_key = generate_api_key()
         user.withdraw_key = new_key
-        user.updated_at = datetime.utcnow()
+        user.updated_at = datetime.now(timezone.utc)
         self.db.add(user)
         await self.db.commit()
         return new_key
@@ -267,8 +275,12 @@ class UserService:
             return None
 
         secret = pyotp.random_base32()
-        user.google_secret = secret
-        user.updated_at = datetime.utcnow()
+        
+        # Encrypt the secret before storing (marked as pending until enabled)
+        cipher = _get_cipher()
+        encrypted_secret = cipher.encrypt(f"pending:{secret}")
+        user.google_secret = encrypted_secret
+        user.updated_at = datetime.now(timezone.utc)
         self.db.add(user)
         await self.db.commit()
 

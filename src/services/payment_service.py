@@ -3,7 +3,7 @@
 import hashlib
 import hmac
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any
 
@@ -352,7 +352,7 @@ class PaymentService:
                 )
 
         # Create order
-        expire_time = datetime.utcnow() + timedelta(minutes=self.DEPOSIT_EXPIRY_MINUTES)
+        expire_time = datetime.now(timezone.utc) + timedelta(minutes=self.DEPOSIT_EXPIRY_MINUTES)
         order = Order(
             order_no=generate_order_no(OrderType.DEPOSIT),
             out_trade_no=out_trade_no,
@@ -581,9 +581,9 @@ class PaymentService:
         if confirmations is not None:
             order.confirmations = confirmations
         if new_status in (OrderStatus.SUCCESS, OrderStatus.FAILED, OrderStatus.EXPIRED):
-            order.completed_at = datetime.utcnow()
+            order.completed_at = datetime.now(timezone.utc)
 
-        order.updated_at = datetime.utcnow()
+        order.updated_at = datetime.now(timezone.utc)
         self.db.add(order)
         await self.db.commit()
         await self.db.refresh(order)
@@ -666,8 +666,8 @@ class PaymentService:
             Updated order
         """
         order.callback_status = CallbackStatus.SUCCESS
-        order.last_callback_at = datetime.utcnow()
-        order.updated_at = datetime.utcnow()
+        order.last_callback_at = datetime.now(timezone.utc)
+        order.updated_at = datetime.now(timezone.utc)
         self.db.add(order)
         await self.db.commit()
         await self.db.refresh(order)
@@ -688,8 +688,8 @@ class PaymentService:
         # Mark as permanently failed after max retries (5)
         if order.callback_retry_count >= 5:
             order.callback_status = CallbackStatus.FAILED
-        order.last_callback_at = datetime.utcnow()
-        order.updated_at = datetime.utcnow()
+        order.last_callback_at = datetime.now(timezone.utc)
+        order.updated_at = datetime.now(timezone.utc)
         self.db.add(order)
         await self.db.commit()
         await self.db.refresh(order)

@@ -1,6 +1,6 @@
 """Chain and Token Service - Business logic for chain/token operations."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -120,7 +120,7 @@ class ChainTokenService:
         for field, value in data.items():
             setattr(chain, field, value)
 
-        chain.updated_at = datetime.utcnow()
+        chain.updated_at = datetime.now(timezone.utc)
 
         await self.db.commit()
         await self.db.refresh(chain)
@@ -256,7 +256,7 @@ class ChainTokenService:
         for field, value in data.items():
             setattr(token, field, value)
 
-        token.updated_at = datetime.utcnow()
+        token.updated_at = datetime.now(timezone.utc)
 
         await self.db.commit()
         await self.db.refresh(token)
@@ -380,7 +380,7 @@ class ChainTokenService:
         for field, value in data.items():
             setattr(support, field, value)
 
-        support.updated_at = datetime.utcnow()
+        support.updated_at = datetime.now(timezone.utc)
 
         await self.db.commit()
         await self.db.refresh(support)

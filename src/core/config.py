@@ -19,6 +19,10 @@ class Settings(BaseSettings):
     # Application
     app_name: str = "AKX Payment Gateway"
     debug: bool = False
+    allowed_origins: str = Field(
+        default="http://localhost:5173,http://localhost:3000",
+        description="Comma-separated list of allowed CORS origins",
+    )
 
     # Database
     database_url: MySQLDsn = Field(..., description="MySQL connection string with aiomysql driver")

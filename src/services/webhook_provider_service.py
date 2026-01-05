@@ -2,7 +2,7 @@
 
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -188,7 +188,7 @@ class WebhookProviderService:
                 encrypt_sensitive_data(data.webhook_secret) if data.webhook_secret else None
             )
 
-        provider.updated_at = datetime.utcnow()
+        provider.updated_at = datetime.now(timezone.utc)
 
         # Update chain supports if provided
         if data.chain_ids is not None:
@@ -362,7 +362,7 @@ class WebhookProviderService:
         if contract_addresses is not None:
             chain_support.contract_addresses = json.dumps(contract_addresses)
 
-        chain_support.updated_at = datetime.utcnow()
+        chain_support.updated_at = datetime.now(timezone.utc)
         await self.db.commit()
 
         return True

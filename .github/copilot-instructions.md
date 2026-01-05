@@ -81,8 +81,10 @@ SOLANA_RPC_URL=https://api.mainnet-beta.solana.com
 src/
 ├── api/                    # API 路由层
 │   ├── __init__.py
+│   ├── deps.py            # 公共依赖类型别名 (CurrentUser, SuperAdmin, TOTPUser 等)
 │   ├── auth.py            # 认证中间件 (Clerk JWT)
 │   ├── wallets.py         # 钱包 API 端点
+│   ├── orders.py          # 订单 API 端点
 │   ├── payment_channels.py # 支付通道 API 端点
 │   ├── chains_tokens.py   # 链和代币 API 端点
 │   ├── fee_configs.py     # 费率配置 API 端点
@@ -220,6 +222,93 @@ async def list_wallets(
     return await service.list_wallets(user, ...)
 ```
 
+## API 依赖类型别名 (重要规范)
+
+项目封装了常用的认证/权限依赖为类型别名，位于 `src/api/deps.py`。
+
+### 可用的类型别名
+
+| 类型别名 | 描述 | 使用场景 |
+|---------|------|---------|
+| `CurrentUser` | 已认证用户 | 普通接口，只需登录 |
+| `TOTPUser` | 已绑定 TOTP 的用户 | 敏感操作前置检查 |
+| `NonGuestUser` | 非 Guest 角色用户 | 排除游客访问 |
+| `SuperAdmin` | 超级管理员 | 系统配置、用户管理等 |
+| `AdminOrSupport` | 管理员或客服 | 订单查询、客服操作 |
+
+### 使用方式
+
+```python
+from src.api.deps import CurrentUser, SuperAdmin, TOTPUser
+
+# ✅ 正确：使用类型别名（简洁）
+@router.get("/wallets")
+async def list_wallets(user: CurrentUser): ...
+
+@router.delete("/users/{id}")
+async def delete_user(user: SuperAdmin): ...
+
+# ❌ 错误：不要直接写 Annotated（冗长且不统一）
+@router.get("/wallets")
+async def list_wallets(user: Annotated[User, Depends(get_current_user)]): ...
+```
+
+### TOTP 验证装饰器 `@totp_required` (推荐)
+
+对于需要 TOTP 验证的敏感操作，使用 `@totp_required` 装饰器：
+
+```python
+from src.api.deps import TOTPUser, totp_required
+
+@router.post("/sensitive-action")
+@totp_required  # 装饰器自动从 data.totp_code 获取验证码并验证
+async def sensitive_action(
+    user: TOTPUser,  # 确保用户已绑定 TOTP
+    data: RequestWithTOTP,  # 请求体必须包含 totp_code 字段
+):
+    # 已通过 TOTP 验证，直接写业务逻辑
+    ...
+```
+
+**装饰器工作原理**：
+- 自动从 `kwargs["user"]` 获取用户
+- 自动从 `kwargs["data"].totp_code` 获取验证码
+- 验证失败直接抛出 `HTTPException(400)`
+
+**请求体 Schema 示例**：
+```python
+class ForceCompleteRequest(BaseModel):
+    remark: str = Field(min_length=1, max_length=500)
+    totp_code: str = Field(min_length=6, max_length=6)  # 必须包含此字段
+```
+
+**完整示例**：
+```python
+from src.api.deps import TOTPUser, totp_required
+
+@router.post("/{order_id}/force-complete")
+@totp_required
+async def force_complete(
+    order_id: int,
+    data: ForceCompleteRequest,
+    user: TOTPUser,
+    service: Annotated[OrderService, Depends(get_order_service)],
+) -> OrderActionResponse:
+    """强制补单 - 需要 TOTP 验证。"""
+    result = await service.force_complete(user, order_id, data)
+    return OrderActionResponse(**result)
+```
+
+### 权限保护规则
+
+| 操作类型 | 所需权限 |
+|---------|---------|
+| 查询列表/详情 | `CurrentUser` |
+| 创建/更新/删除配置 | `SuperAdmin` |
+| 敏感操作（强制补单、导出私钥） | `TOTPUser` + `@totp_required` |
+| 用户管理 | `SuperAdmin` |
+| 订单查询 | `CurrentUser`（Service 层过滤数据） |
+
 ## Critical Patterns
 
 ### Database Fields (MySQL-specific)
@@ -324,10 +413,13 @@ from src.db.engine import get_db_for_script  # 不存在！
 ### Utils (工具函数)
 - `src/utils/crypto.py` - 加密工具 (钱包生成、地址验证)
 - `src/utils/pagination.py` - 分页工具 (PaginationParams、paginate_query)
+- `src/utils/totp.py` - TOTP 工具 (verify_totp、generate_totp_secret、get_totp_uri)
 - `src/utils/helpers.py` - 通用辅助函数
 
 ### API Routes
+- `src/api/deps.py` - 公共依赖类型别名 (CurrentUser, SuperAdmin, TOTPUser 等)
 - `src/api/auth.py` - Clerk JWT verification + user sync
+- `src/api/orders.py` - 订单 API 端点 (充值/提现订单、强制补单、重发回调)
 - `src/api/wallets.py` - 钱包 API 端点
 - `src/api/payment_channels.py` - 支付通道 API 端点
 - `src/api/chains_tokens.py` - 链和代币 API 端点

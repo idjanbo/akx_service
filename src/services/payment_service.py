@@ -12,7 +12,13 @@ from sqlmodel import select
 
 from src.models.chain import Chain
 from src.models.fee_config import FeeConfig
-from src.models.order import CallbackStatus, Order, OrderStatus, OrderType
+from src.models.order import (
+    CallbackStatus,
+    Order,
+    OrderStatus,
+    OrderType,
+    generate_order_no,
+)
 from src.models.token import Token, TokenChainSupport
 from src.models.user import User, UserRole
 from src.models.wallet import Wallet, WalletType
@@ -348,6 +354,7 @@ class PaymentService:
         # Create order
         expire_time = datetime.utcnow() + timedelta(minutes=self.DEPOSIT_EXPIRY_MINUTES)
         order = Order(
+            order_no=generate_order_no(OrderType.DEPOSIT),
             out_trade_no=out_trade_no,
             order_type=OrderType.DEPOSIT,
             merchant_id=merchant.id,
@@ -455,6 +462,7 @@ class PaymentService:
         # Create order
         net_amount = amount  # User receives full amount, fee is separate
         order = Order(
+            order_no=generate_order_no(OrderType.WITHDRAW),
             out_trade_no=out_trade_no,
             order_type=OrderType.WITHDRAW,
             merchant_id=merchant.id,

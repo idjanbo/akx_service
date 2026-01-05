@@ -155,7 +155,7 @@ merchant_no + timestamp + nonce + out_trade_no + token + chain + amount + callba
 ```json
 {
   "success": true,
-  "order_no": "ORD1702345678000ABC12345",
+  "order_no": "DEP1702345678000ABC12345",
   "out_trade_no": "ORDER20231212001",
   "token": "USDT",
   "chain": "tron",
@@ -220,7 +220,7 @@ merchant_no + timestamp + nonce + out_trade_no + token + chain + amount + to_add
 ```json
 {
   "success": true,
-  "order_no": "ORD1702345678000DEF67890",
+  "order_no": "WIT1702345678000DEF67890",
   "out_trade_no": "WD20231212001",
   "token": "USDT",
   "chain": "tron",
@@ -269,7 +269,7 @@ merchant_no + timestamp + nonce + order_no
   "merchant_no": "M1234567890123",
   "timestamp": 1702345678000,
   "nonce": "query123nonce456",
-  "order_no": "ORD1702345678000ABC12345",
+  "order_no": "DEP1702345678000ABC12345",
   "sign": "1a2b3c4d5e6f..."
 }
 ```
@@ -305,7 +305,7 @@ merchant_no + timestamp + nonce + out_trade_no + order_type
 ```json
 {
   "success": true,
-  "order_no": "ORD1702345678000ABC12345",
+  "order_no": "DEP1702345678000ABC12345",
   "out_trade_no": "ORDER20231212001",
   "order_type": "deposit",
   "token": "USDT",
@@ -371,7 +371,7 @@ merchant_no + order_no + status + amount
 ```json
 {
   "merchant_no": "M1234567890123",
-  "order_no": "ORD1702345678000ABC12345",
+  "order_no": "DEP1702345678000ABC12345",
   "out_trade_no": "ORDER20231212001",
   "order_type": "deposit",
   "token": "USDT",

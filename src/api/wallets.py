@@ -11,9 +11,8 @@ from pydantic import BaseModel
 from pydantic import Field as PydanticField
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.api.auth import get_current_user
+from src.api.deps import CurrentUser
 from src.db import get_db
-from src.models.user import User
 from src.services.wallet_service import WalletService
 from src.utils.pagination import PaginationParams
 
@@ -154,7 +153,7 @@ def get_wallet_service(db: Annotated[AsyncSession, Depends(get_db)]) -> WalletSe
 
 @router.get("/assets/summary", response_model=AssetSummaryResponse)
 async def get_asset_summary(
-    user: Annotated[User, Depends(get_current_user)],
+    user: CurrentUser,
     service: Annotated[WalletService, Depends(get_wallet_service)],
 ) -> AssetSummaryResponse:
     """Get asset summary for the current user.
@@ -167,7 +166,7 @@ async def get_asset_summary(
 
 @router.get("", response_model=PaginatedWalletsResponse)
 async def list_wallets(
-    user: Annotated[User, Depends(get_current_user)],
+    user: CurrentUser,
     service: Annotated[WalletService, Depends(get_wallet_service)],
     chain_id: int | None = None,
     token_id: int | None = None,
@@ -201,7 +200,7 @@ async def list_wallets(
 @router.post("/generate", response_model=GenerateWalletsResponse)
 async def generate_wallets(
     request: GenerateWalletsRequest,
-    user: Annotated[User, Depends(get_current_user)],
+    user: CurrentUser,
     service: Annotated[WalletService, Depends(get_wallet_service)],
 ) -> GenerateWalletsResponse:
     """Generate new wallet addresses for a chain.
@@ -230,7 +229,7 @@ async def generate_wallets(
 @router.post("/import", response_model=WalletResponse)
 async def import_wallet(
     request: ImportWalletRequest,
-    user: Annotated[User, Depends(get_current_user)],
+    user: CurrentUser,
     service: Annotated[WalletService, Depends(get_wallet_service)],
 ) -> WalletResponse:
     """Import an existing wallet with private key.
@@ -261,7 +260,7 @@ async def import_wallet(
 @router.get("/{wallet_id}", response_model=WalletResponse)
 async def get_wallet(
     wallet_id: int,
-    user: Annotated[User, Depends(get_current_user)],
+    user: CurrentUser,
     service: Annotated[WalletService, Depends(get_wallet_service)],
 ) -> WalletResponse:
     """Get a single wallet by ID."""
@@ -275,7 +274,7 @@ async def get_wallet(
 async def update_wallet(
     wallet_id: int,
     request: UpdateWalletRequest,
-    user: Annotated[User, Depends(get_current_user)],
+    user: CurrentUser,
     service: Annotated[WalletService, Depends(get_wallet_service)],
 ) -> WalletResponse:
     """Update a wallet's label or status."""
@@ -293,7 +292,7 @@ async def update_wallet(
 @router.delete("/{wallet_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_wallet(
     wallet_id: int,
-    user: Annotated[User, Depends(get_current_user)],
+    user: CurrentUser,
     service: Annotated[WalletService, Depends(get_wallet_service)],
 ) -> None:
     """Delete a wallet.

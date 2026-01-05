@@ -194,12 +194,29 @@ async def get_me(user: Annotated[User, Depends(get_current_user)]):
     Returns:
         Current user data including role for frontend RBAC
     """
+    # 检查 TOTP 是否已启用（有 google_secret 且不是 pending 状态）
+    totp_enabled = False
+    if user.google_secret:
+        # google_secret 是加密存储的，这里只检查是否存在
+        # pending 状态的密钥以 "pending:" 开头（加密前）
+        # 由于是加密的，我们需要解密后检查
+        from src.core.config import get_settings
+        from src.core.security import AESCipher
+
+        try:
+            cipher = AESCipher(get_settings().aes_encryption_key)
+            decrypted = cipher.decrypt(user.google_secret)
+            totp_enabled = not decrypted.startswith("pending:")
+        except Exception:
+            totp_enabled = False
+
     return {
         "id": user.id,
         "clerk_id": user.clerk_id,
         "email": user.email,
         "role": user.role.value,
         "is_active": user.is_active,
+        "totp_enabled": totp_enabled,
         "created_at": user.created_at.isoformat(),
         "updated_at": user.updated_at.isoformat(),
     }

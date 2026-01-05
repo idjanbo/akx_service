@@ -48,6 +48,9 @@ class UserResponse(BaseModel):
     role: UserRole
     is_active: bool
 
+    # TOTP (Google Authenticator) 绑定状态
+    totp_enabled: bool = False
+
     # Merchant fields (visible when role is merchant)
     balance: DecimalStr
     credit_limit: DecimalStr

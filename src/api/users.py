@@ -10,7 +10,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.api.auth import require_admin
+from src.api.deps import SuperAdmin
 from src.db import get_db
 from src.models.user import User, UserRole
 from src.schemas.user import (
@@ -44,7 +44,7 @@ def get_user_service(db: Annotated[AsyncSession, Depends(get_db)]) -> UserServic
 @router.get("", response_model=PaginatedResponse[UserResponse])
 async def list_users(
     service: Annotated[UserService, Depends(get_user_service)],
-    current_user: Annotated[User, Depends(require_admin())],
+    current_user: SuperAdmin,
     page: int = Query(default=1, ge=1, description="Page number"),
     page_size: int = Query(default=20, ge=1, le=100, description="Items per page"),
     search: str | None = Query(default=None, description="Search by email"),
@@ -89,7 +89,7 @@ async def list_users(
 async def get_user(
     user_id: int,
     service: Annotated[UserService, Depends(get_user_service)],
-    current_user: Annotated[User, Depends(require_admin())],
+    current_user: SuperAdmin,
 ) -> User:
     """Get a single user by ID (admin only)."""
     user = await service.get_user(user_id)
@@ -103,7 +103,7 @@ async def update_user_role(
     user_id: int,
     request: UpdateUserRoleRequest,
     service: Annotated[UserService, Depends(get_user_service)],
-    current_user: Annotated[User, Depends(require_admin())],
+    current_user: SuperAdmin,
 ) -> User:
     """Update user role (admin only)."""
     try:
@@ -121,7 +121,7 @@ async def update_user_status(
     user_id: int,
     request: UpdateUserStatusRequest,
     service: Annotated[UserService, Depends(get_user_service)],
-    current_user: Annotated[User, Depends(require_admin())],
+    current_user: SuperAdmin,
 ) -> User:
     """Update user active status (admin only)."""
     user = await service.update_user_status(user_id, request.is_active)
@@ -135,7 +135,7 @@ async def update_user_balance(
     user_id: int,
     request: UpdateUserBalanceRequest,
     service: Annotated[UserService, Depends(get_user_service)],
-    current_user: Annotated[User, Depends(require_admin())],
+    current_user: SuperAdmin,
 ) -> User:
     """Update user balance (admin only)."""
     user = await service.update_user_balance(user_id, request.balance)
@@ -149,7 +149,7 @@ async def update_user_credit_limit(
     user_id: int,
     request: UpdateUserCreditLimitRequest,
     service: Annotated[UserService, Depends(get_user_service)],
-    current_user: Annotated[User, Depends(require_admin())],
+    current_user: SuperAdmin,
 ) -> User:
     """Update user credit limit (admin only)."""
     try:
@@ -167,7 +167,7 @@ async def update_user_fee_config(
     user_id: int,
     request: UpdateUserFeeConfigRequest,
     service: Annotated[UserService, Depends(get_user_service)],
-    current_user: Annotated[User, Depends(require_admin())],
+    current_user: SuperAdmin,
 ) -> User:
     """Update user fee configuration (admin only)."""
     try:
@@ -184,7 +184,7 @@ async def update_user_fee_config(
 async def reset_deposit_key(
     user_id: int,
     service: Annotated[UserService, Depends(get_user_service)],
-    current_user: Annotated[User, Depends(require_admin())],
+    current_user: SuperAdmin,
 ) -> ResetKeyResponse:
     """Reset user deposit API key (admin only)."""
     new_key = await service.reset_deposit_key(user_id)
@@ -197,7 +197,7 @@ async def reset_deposit_key(
 async def reset_withdraw_key(
     user_id: int,
     service: Annotated[UserService, Depends(get_user_service)],
-    current_user: Annotated[User, Depends(require_admin())],
+    current_user: SuperAdmin,
 ) -> ResetKeyResponse:
     """Reset user withdrawal API key (admin only)."""
     new_key = await service.reset_withdraw_key(user_id)
@@ -210,7 +210,7 @@ async def reset_withdraw_key(
 async def reset_google_secret(
     user_id: int,
     service: Annotated[UserService, Depends(get_user_service)],
-    current_user: Annotated[User, Depends(require_admin())],
+    current_user: SuperAdmin,
 ) -> ResetGoogleSecretResponse:
     """Reset user Google authenticator secret (admin only)."""
     result = await service.reset_google_secret(user_id)

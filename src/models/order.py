@@ -45,15 +45,17 @@ class CallbackStatus(str, Enum):
     FAILED = "failed"  # 发送失败（已达最大重试次数）
 
 
-def generate_order_no() -> str:
+def generate_order_no(order_type: OrderType) -> str:
     """Generate a unique order number.
 
-    Format: ORD + timestamp_ms + random_hex(8)
-    Example: ORD1702345678000ABC12345
+    Format: PREFIX + timestamp_ms + random_hex(8)
+    - Deposit: DEP1702345678000ABC12345
+    - Withdraw: WIT1702345678000ABC12345
     """
     timestamp = int(time.time() * 1000)
     random_suffix = secrets.token_hex(5).upper()
-    return f"ORD{timestamp}{random_suffix}"
+    prefix = "DEP" if order_type == OrderType.DEPOSIT else "WIT"
+    return f"{prefix}{timestamp}{random_suffix}"
 
 
 class Order(SQLModel, table=True):
@@ -104,11 +106,10 @@ class Order(SQLModel, table=True):
 
     id: int | None = Field(default=None, primary_key=True)
     order_no: str = Field(
-        default_factory=generate_order_no,
         max_length=64,
         unique=True,
         index=True,
-        description="System order number",
+        description="System order number (DEP/WIT prefix)",
     )
     out_trade_no: str = Field(
         max_length=64,
@@ -215,7 +216,7 @@ class Order(SQLModel, table=True):
 
         json_schema_extra = {
             "example": {
-                "order_no": "ORD1702345678000ABC12345",
+                "order_no": "DEP1702345678000ABC12345",
                 "out_trade_no": "ORDER20231212001",
                 "order_type": "deposit",
                 "token": "USDT",

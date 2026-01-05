@@ -7,11 +7,10 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.api.auth import get_current_user
+from src.api.deps import CurrentUser
 from src.core.config import get_settings
 from src.core.security import AESCipher
 from src.db import get_db
-from src.models.user import User
 
 router = APIRouter(prefix="/totp", tags=["totp"])
 
@@ -60,7 +59,7 @@ def get_cipher() -> AESCipher:
 
 @router.get("/status", response_model=TOTPStatusResponse)
 async def get_totp_status(
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: CurrentUser,
 ) -> TOTPStatusResponse:
     """Check if TOTP is enabled for current user."""
     # Check both None and empty string, also exclude pending secrets
@@ -74,7 +73,7 @@ async def get_totp_status(
 
 @router.post("/setup", response_model=TOTPSetupResponse)
 async def setup_totp(
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: CurrentUser,
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> TOTPSetupResponse:
     """Generate a new TOTP secret for the user.
@@ -110,7 +109,7 @@ async def setup_totp(
 @router.post("/enable", response_model=TOTPVerifyResponse)
 async def enable_totp(
     request: TOTPVerifyRequest,
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: CurrentUser,
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> TOTPVerifyResponse:
     """Enable TOTP after verifying the code.
@@ -165,7 +164,7 @@ async def enable_totp(
 @router.post("/verify", response_model=TOTPVerifyResponse)
 async def verify_totp(
     request: TOTPVerifyRequest,
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: CurrentUser,
 ) -> TOTPVerifyResponse:
     """Verify a TOTP code for sensitive operations.
 
@@ -209,7 +208,7 @@ async def verify_totp(
 @router.post("/disable", response_model=TOTPVerifyResponse)
 async def disable_totp(
     request: TOTPVerifyRequest,
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: CurrentUser,
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> TOTPVerifyResponse:
     """Disable TOTP for current user.

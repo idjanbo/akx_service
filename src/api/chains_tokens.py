@@ -9,6 +9,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.api.deps import SuperAdmin
 from src.db.engine import get_db
 from src.schemas.chain_token import (
     ChainCreate,
@@ -83,6 +84,7 @@ async def get_chain_with_tokens(
 async def create_chain(
     chain_data: ChainCreate,
     service: Annotated[ChainTokenService, Depends(get_chain_token_service)],
+    current_user: SuperAdmin,
 ):
     """Create a new blockchain network.
 
@@ -99,6 +101,7 @@ async def update_chain(
     chain_id: int,
     chain_data: ChainUpdate,
     service: Annotated[ChainTokenService, Depends(get_chain_token_service)],
+    current_user: SuperAdmin,
 ):
     """Update chain configuration.
 
@@ -114,6 +117,7 @@ async def update_chain(
 async def delete_chain(
     chain_id: int,
     service: Annotated[ChainTokenService, Depends(get_chain_token_service)],
+    current_user: SuperAdmin,
 ):
     """Delete a chain.
 
@@ -177,6 +181,7 @@ async def get_token_with_chains(
 async def create_token(
     token_data: TokenCreate,
     service: Annotated[ChainTokenService, Depends(get_chain_token_service)],
+    current_user: SuperAdmin,
 ):
     """Create a new cryptocurrency token.
 
@@ -193,6 +198,7 @@ async def update_token(
     token_id: int,
     token_data: TokenUpdate,
     service: Annotated[ChainTokenService, Depends(get_chain_token_service)],
+    current_user: SuperAdmin,
 ):
     """Update token configuration.
 
@@ -208,6 +214,7 @@ async def update_token(
 async def delete_token(
     token_id: int,
     service: Annotated[ChainTokenService, Depends(get_chain_token_service)],
+    current_user: SuperAdmin,
 ):
     """Delete a token.
 
@@ -242,6 +249,7 @@ async def list_token_chain_supports(
 async def create_token_chain_support(
     support_data: TokenChainSupportCreate,
     service: Annotated[ChainTokenService, Depends(get_chain_token_service)],
+    current_user: SuperAdmin,
 ):
     """Add token support on a specific chain.
 
@@ -261,6 +269,7 @@ async def update_token_chain_support(
     support_id: int,
     support_data: TokenChainSupportUpdate,
     service: Annotated[ChainTokenService, Depends(get_chain_token_service)],
+    current_user: SuperAdmin,
 ):
     """Update token-chain support configuration.
 
@@ -278,6 +287,7 @@ async def update_token_chain_support(
 async def delete_token_chain_support(
     support_id: int,
     service: Annotated[ChainTokenService, Depends(get_chain_token_service)],
+    current_user: SuperAdmin,
 ):
     """Remove token support from a chain.
 

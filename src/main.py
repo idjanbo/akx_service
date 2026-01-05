@@ -54,6 +54,7 @@ def create_app() -> FastAPI:
     from src.api.auth import router as auth_router
     from src.api.chains_tokens import router as chains_tokens_router
     from src.api.fee_configs import router as fee_configs_router
+    from src.api.orders import router as orders_router
     from src.api.payment import router as payment_router
     from src.api.payment_channels import router as payment_channels_router
     from src.api.totp import router as totp_router
@@ -65,6 +66,7 @@ def create_app() -> FastAPI:
     app.include_router(auth_router, prefix="/api", tags=["auth"])
     app.include_router(users_router, prefix="/api", tags=["users"])
     app.include_router(wallets_router, prefix="/api/wallets", tags=["wallets"])
+    app.include_router(orders_router, prefix="/api")  # Order management
     app.include_router(payment_channels_router, prefix="/api")
     app.include_router(chains_tokens_router)
     app.include_router(fee_configs_router, prefix="/api")

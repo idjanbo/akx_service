@@ -10,10 +10,9 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.api.auth import get_current_user
+from src.api.deps import CurrentUser, SuperAdmin
 from src.db.engine import get_db
 from src.models.fee_config import FeeConfig
-from src.models.user import User
 from src.schemas.fee_config import (
     FeeCalculationRequest,
     FeeCalculationResponse,
@@ -40,18 +39,12 @@ def get_fee_config_service(db: Annotated[AsyncSession, Depends(get_db)]) -> FeeC
 @router.get("", response_model=list[FeeConfigResponse])
 async def list_fee_configs(
     service: Annotated[FeeConfigService, Depends(get_fee_config_service)],
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: SuperAdmin,
 ) -> list[FeeConfig]:
     """List all fee configurations.
 
     Only accessible by super_admin users.
     """
-    if current_user.role != "super_admin":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only super admin can access fee configurations",
-        )
-
     return await service.list_fee_configs()
 
 
@@ -59,18 +52,12 @@ async def list_fee_configs(
 async def get_fee_config(
     fee_config_id: int,
     service: Annotated[FeeConfigService, Depends(get_fee_config_service)],
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: SuperAdmin,
 ) -> FeeConfig:
     """Get fee configuration by ID.
 
     Only accessible by super_admin users.
     """
-    if current_user.role != "super_admin":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only super admin can access fee configurations",
-        )
-
     fee_config = await service.get_fee_config(fee_config_id)
     if not fee_config:
         raise HTTPException(
@@ -84,20 +71,15 @@ async def get_fee_config(
 async def create_fee_config(
     fee_config_data: FeeConfigCreate,
     service: Annotated[FeeConfigService, Depends(get_fee_config_service)],
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: SuperAdmin,
 ) -> FeeConfig:
     """Create new fee configuration.
 
     Only accessible by super_admin users.
     If is_default is True, all other configs will be set to False.
     """
-    if current_user.role != "super_admin":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only super admin can create fee configurations",
-        )
-
     try:
+        return await service.create_fee_config(fee_config_data.model_dump())
         return await service.create_fee_config(fee_config_data.model_dump())
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
@@ -108,19 +90,13 @@ async def update_fee_config(
     fee_config_id: int,
     fee_config_data: FeeConfigUpdate,
     service: Annotated[FeeConfigService, Depends(get_fee_config_service)],
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: SuperAdmin,
 ) -> FeeConfig:
     """Update fee configuration.
 
     Only accessible by super_admin users.
     If is_default is set to True, all other configs will be set to False.
     """
-    if current_user.role != "super_admin":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only super admin can update fee configurations",
-        )
-
     try:
         result = await service.update_fee_config(
             fee_config_id, fee_config_data.model_dump(exclude_unset=True)
@@ -140,19 +116,13 @@ async def update_fee_config(
 async def delete_fee_config(
     fee_config_id: int,
     service: Annotated[FeeConfigService, Depends(get_fee_config_service)],
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: SuperAdmin,
 ) -> None:
     """Delete fee configuration.
 
     Only accessible by super_admin users.
     Cannot delete if any users are using this configuration.
     """
-    if current_user.role != "super_admin":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only super admin can delete fee configurations",
-        )
-
     try:
         deleted = await service.delete_fee_config(fee_config_id)
     except ValueError as e:
@@ -169,7 +139,7 @@ async def delete_fee_config(
 async def calculate_fee(
     request: FeeCalculationRequest,
     service: Annotated[FeeConfigService, Depends(get_fee_config_service)],
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: CurrentUser,
 ) -> FeeCalculationResponse:
     """Calculate fee for a transaction amount.
 

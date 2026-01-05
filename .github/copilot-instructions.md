@@ -137,6 +137,44 @@ Formula: `(amount * percentage) + fixed_fee`
 
 Sensitive operations (withdrawals, key export, security settings) require Google Auth (TOTP).
 
+## Database Script Patterns (重要规范)
+
+### 独立脚本中使用数据库 Session
+**必须使用 `get_session()` 上下文管理器**，不要尝试使用 FastAPI 的依赖注入方式。
+
+**⚠️ 重要：脚本结束时必须调用 `close_db()` 关闭连接池**，否则会出现 `RuntimeError: Event loop is closed` 错误。
+
+```python
+# ✅ 正确：使用 get_session 上下文管理器 + close_db 关闭连接
+from src.db.engine import close_db, get_session
+
+async def my_script():
+    try:
+        async with get_session() as db:
+            result = await db.execute(select(Model))
+            # 处理数据...
+            await db.commit()
+    finally:
+        # 必须：关闭数据库连接池，避免事件循环关闭时的警告
+        await close_db()
+
+if __name__ == "__main__":
+    asyncio.run(my_script())
+```
+
+```python
+# ❌ 错误：不要在脚本中使用 async for（那是 FastAPI 依赖注入的方式）
+async for db in get_db():  # 这是 FastAPI 路由用的
+    pass
+
+# ❌ 错误：不要尝试导入不存在的函数
+from src.db.engine import get_db_for_script  # 不存在！
+```
+
+**可用的数据库函数**（定义在 `src/db/engine.py`）：
+- `get_session()` - 异步上下文管理器，用于脚本和非 FastAPI 代码
+- `get_db()` - FastAPI 依赖注入，仅用于路由处理函数
+
 ## Key Libraries
 - `tronpy` - TRON interactions (primary)
 - `web3.py` - Ethereum interactions

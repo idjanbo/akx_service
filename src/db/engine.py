@@ -76,3 +76,20 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
         except Exception:
             await session.rollback()
             raise
+
+
+async def get_db_for_script() -> AsyncGenerator[AsyncSession, None]:
+    """Get database session for standalone scripts.
+
+    Usage in scripts:
+        async for db in get_db_for_script():
+            # do something with db
+            pass
+    """
+    async with async_session_factory() as session:
+        try:
+            yield session
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise

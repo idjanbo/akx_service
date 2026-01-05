@@ -2,6 +2,7 @@
 
 from src.models.chain import Chain
 from src.models.fee_config import FeeConfig
+from src.models.payment_channel import ChannelStatus, PaymentChannel
 from src.models.token import Token, TokenChainSupport
 from src.models.user import User, UserRole
 from src.models.wallet import (
@@ -18,6 +19,9 @@ __all__ = [
     "UserRole",
     # Fee Config
     "FeeConfig",
+    # Payment Channel
+    "PaymentChannel",
+    "ChannelStatus",
     # Chain & Token (New)
     "Chain",
     "Token",

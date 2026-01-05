@@ -25,6 +25,8 @@ class WalletResponse(BaseModel):
     id: int
     chain_id: int
     chain_name: str
+    token_id: int | None
+    token_symbol: str | None
     address: str
     source: str  # SYSTEM_GENERATED or MANUAL_IMPORT
     balance: str | None
@@ -280,6 +282,7 @@ async def list_wallets(
     user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
     chain_id: int | None = None,
+    token_id: int | None = None,
     source: str | None = None,
     is_active: bool | None = None,
     page: Annotated[int, Query(ge=1)] = 1,
@@ -299,6 +302,8 @@ async def list_wallets(
     # Apply filters
     if chain_id:
         query = query.where(Wallet.chain_id == chain_id)
+    if token_id:
+        query = query.where(Wallet.token_id == token_id)
     if source:
         if source == "SYSTEM_GENERATED":
             query = query.where(Wallet.wallet_type == WalletType.DEPOSIT)
@@ -326,6 +331,14 @@ async def list_wallets(
         for c in chains_result.scalars():
             chain_names[c.id] = c.name  # type: ignore
 
+    # Get token symbols
+    token_ids = list({w.token_id for w in wallets if w.token_id})
+    token_symbols: dict[int, str] = {}
+    if token_ids:
+        tokens_result = await db.execute(select(Token).where(Token.id.in_(token_ids)))
+        for t in tokens_result.scalars():
+            token_symbols[t.id] = t.symbol  # type: ignore
+
     # Get user names (merchants)
     user_ids = list({w.user_id for w in wallets if w.user_id})
     user_names: dict[int, str] = {}
@@ -342,6 +355,8 @@ async def list_wallets(
                 id=w.id,  # type: ignore
                 chain_id=w.chain_id,
                 chain_name=chain_names.get(w.chain_id, "Unknown"),
+                token_id=w.token_id,
+                token_symbol=token_symbols.get(w.token_id) if w.token_id else None,
                 address=w.address,
                 source=(
                     "SYSTEM_GENERATED" if w.wallet_type == WalletType.DEPOSIT else "MANUAL_IMPORT"

@@ -27,7 +27,7 @@ from src.schemas.user import (
 from src.services.user_service import UserService
 from src.utils.pagination import PaginationParams
 
-router = APIRouter(prefix="/users", tags=["users"])
+router = APIRouter(prefix="/users", tags=["Users"])
 
 
 # ============ Dependency ============

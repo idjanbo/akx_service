@@ -29,9 +29,9 @@ def register_routers(app: FastAPI) -> None:
     from src.api.totp import router as totp_router
     from src.api.users import router as users_router
 
-    app.include_router(auth_router, prefix="/api", tags=["Auth"])
-    app.include_router(totp_router, prefix="/api", tags=["TOTP"])
-    app.include_router(users_router, prefix="/api", tags=["Users"])
+    app.include_router(auth_router, prefix="/api")
+    app.include_router(totp_router, prefix="/api")
+    app.include_router(users_router, prefix="/api")
 
     # Wallet & Asset management
     from src.api.wallets import router as wallets_router

@@ -27,7 +27,7 @@ from src.schemas.chain_token import (
 )
 from src.services.chain_token_service import ChainTokenService
 
-router = APIRouter(prefix="/api", tags=["chains-tokens"])
+router = APIRouter(prefix="/api", tags=["Chains & Tokens"])
 
 
 # ============ Dependency ============

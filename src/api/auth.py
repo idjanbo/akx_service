@@ -184,7 +184,7 @@ def require_merchant():
 
 
 # FastAPI Router
-router = APIRouter(prefix="/auth", tags=["auth"])
+router = APIRouter(prefix="/auth", tags=["Auth"])
 
 
 @router.get("/me")

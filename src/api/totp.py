@@ -12,7 +12,7 @@ from src.core.config import get_settings
 from src.core.security import AESCipher
 from src.db import get_db
 
-router = APIRouter(prefix="/totp", tags=["totp"])
+router = APIRouter(prefix="/totp", tags=["TOTP"])
 
 
 # --- Schemas ---

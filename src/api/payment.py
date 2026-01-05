@@ -30,7 +30,7 @@ from src.schemas.payment import (
 )
 from src.services.payment_service import PaymentError, PaymentService
 
-router = APIRouter(prefix="/api/v1/payment", tags=["payment"])
+router = APIRouter(prefix="/api/v1/payment", tags=["Payment API"])
 
 
 # ============ Dependencies ============

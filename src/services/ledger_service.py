@@ -1,6 +1,6 @@
 """Ledger Service - Business logic for transaction records."""
 
-from datetime import datetime, timezone
+from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
@@ -325,7 +325,7 @@ class LedgerService:
             amount=amount,
             remark=remark,
             operator_id=operator.id,
-            completed_at=datetime.now(timezone.utc),
+            completed_at=datetime.now(datetime.UTC),
         )
         self.db.add(recharge)
 
@@ -493,7 +493,7 @@ class LedgerService:
         else:
             record.status = RechargeStatus.FAILED
 
-        record.completed_at = datetime.now(timezone.utc)
+        record.completed_at = datetime.now(datetime.UTC)
         self.db.add(record)
         await self.db.commit()
         await self.db.refresh(record)

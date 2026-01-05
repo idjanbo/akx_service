@@ -1,6 +1,6 @@
 """Order service for business logic."""
 
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any
 
 from sqlalchemy import func, select
@@ -171,7 +171,7 @@ class OrderService:
         # Reset callback status
         order.callback_status = CallbackStatus.PENDING
         order.callback_retry_count = 0
-        order.updated_at = datetime.now(timezone.utc)
+        order.updated_at = datetime.now(datetime.UTC)
 
         await self.db.commit()
         await self.db.refresh(order)
@@ -224,11 +224,11 @@ class OrderService:
         # Update order
         old_status = order.status
         order.status = OrderStatus.SUCCESS
-        order.completed_at = datetime.now(timezone.utc)
-        order.updated_at = datetime.now(timezone.utc)
+        order.completed_at = datetime.now(datetime.UTC)
+        order.updated_at = datetime.now(datetime.UTC)
 
         # Add remark
-        timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+        timestamp = datetime.now(datetime.UTC).strftime("%Y-%m-%d %H:%M:%S")
         force_remark = (
             f"[强制补单] {timestamp} 由 {user.email} 操作。"
             f"原状态: {old_status.value}。备注: {data.remark}"

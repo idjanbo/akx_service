@@ -305,3 +305,41 @@ async def delete_wallet(
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Wallet not found")
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+# ============ Deposit Address Endpoints ============
+
+
+class DepositAddressResponse(BaseModel):
+    """Deposit address response for online recharge."""
+
+    address: str
+    chain_code: str
+    chain_name: str
+    token_code: str
+    token_symbol: str
+    qr_content: str  # Content for QR code (usually just the address)
+    min_deposit: str | None = None
+    confirmations: int
+
+
+@router.get("/deposit-address", response_model=DepositAddressResponse)
+async def get_deposit_address(
+    user: CurrentUser,
+    service: Annotated[WalletService, Depends(get_wallet_service)],
+    chain_code: str = Query(..., description="Chain code (e.g., TRON, ETH)"),
+    token_code: str = Query(default="usdt", description="Token code (e.g., usdt, usdc)"),
+) -> DepositAddressResponse:
+    """Get or create a deposit address for online recharge.
+
+    Returns an existing active deposit address or creates a new one.
+    """
+    try:
+        result = await service.get_or_create_deposit_address(
+            user=user,
+            chain_code=chain_code.upper(),
+            token_code=token_code.lower(),
+        )
+        return DepositAddressResponse(**result)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))

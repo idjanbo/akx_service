@@ -8,7 +8,7 @@ from sqlmodel import select
 
 from src.core.security import get_cipher
 from src.models.chain import Chain
-from src.models.token import Token
+from src.models.token import Token, TokenChainSupport
 from src.models.user import User, UserRole
 from src.models.wallet import Wallet, WalletType
 from src.utils.crypto import generate_wallet_for_chain, validate_address_for_chain
@@ -515,4 +515,95 @@ class WalletService:
             "remark": wallet.label,
             "is_active": wallet.is_active,
             "created_at": wallet.created_at.isoformat() if wallet.created_at else "",
+        }
+
+    # ============ Deposit Address for Online Recharge ============
+
+    async def get_or_create_deposit_address(
+        self,
+        user: User,
+        chain_code: str,
+        token_code: str = "usdt",
+    ) -> dict[str, Any]:
+        """Get or create a deposit address for online recharge.
+
+        Args:
+            user: Current user
+            chain_code: Chain code (e.g., TRON, ETH)
+            token_code: Token code (e.g., usdt, usdc)
+
+        Returns:
+            Deposit address info with chain and token details
+
+        Raises:
+            ValueError: If chain or token not found/not enabled
+        """
+        # Find chain by code
+        chain_result = await self.db.execute(
+            select(Chain).where(Chain.code == chain_code, Chain.is_enabled == True)  # noqa: E712
+        )
+        chain = chain_result.scalar_one_or_none()
+        if not chain:
+            raise ValueError(f"Chain '{chain_code}' not found or not enabled")
+
+        # Find token by code
+        token_result = await self.db.execute(
+            select(Token).where(Token.code == token_code, Token.is_enabled == True)  # noqa: E712
+        )
+        token = token_result.scalar_one_or_none()
+        if not token:
+            raise ValueError(f"Token '{token_code}' not found or not enabled")
+
+        # Check if token is supported on this chain
+        support_result = await self.db.execute(
+            select(TokenChainSupport).where(
+                TokenChainSupport.token_id == token.id,
+                TokenChainSupport.chain_id == chain.id,
+                TokenChainSupport.is_enabled == True,  # noqa: E712
+            )
+        )
+        token_chain_support = support_result.scalar_one_or_none()
+        if not token_chain_support:
+            raise ValueError(f"Token '{token_code}' is not supported on chain '{chain_code}'")
+
+        # Look for existing active deposit wallet
+        existing_result = await self.db.execute(
+            select(Wallet).where(
+                Wallet.user_id == user.id,
+                Wallet.chain_id == chain.id,
+                Wallet.token_id == token.id,
+                Wallet.wallet_type == WalletType.DEPOSIT,
+                Wallet.is_active == True,  # noqa: E712
+            )
+        )
+        wallet = existing_result.scalar_one_or_none()
+
+        # If no existing wallet, create one
+        if not wallet:
+            cipher = get_cipher()
+            address, private_key = generate_wallet_for_chain(chain.code)
+            encrypted_pk = cipher.encrypt(private_key)
+
+            wallet = Wallet(
+                user_id=user.id,
+                chain_id=chain.id,
+                token_id=token.id,
+                address=address,
+                encrypted_private_key=encrypted_pk,
+                wallet_type=WalletType.DEPOSIT,
+                is_active=True,
+            )
+            self.db.add(wallet)
+            await self.db.commit()
+            await self.db.refresh(wallet)
+
+        return {
+            "address": wallet.address,
+            "chain_code": chain.code,
+            "chain_name": chain.name,
+            "token_code": token.code,
+            "token_symbol": token.symbol,
+            "qr_content": wallet.address,  # QR code content is just the address
+            "min_deposit": token_chain_support.min_deposit,
+            "confirmations": chain.confirmation_blocks or 1,
         }

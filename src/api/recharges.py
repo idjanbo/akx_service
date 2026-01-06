@@ -73,6 +73,20 @@ class GeneratePoolRequest(BaseModel):
     token_code: str = Field(default="USDT", description="Token code")
 
 
+class RechargeAddressResponse(BaseModel):
+    """Recharge address response for online recharge."""
+
+    address: str
+    chain_code: str
+    chain_name: str
+    token_code: str
+    token_symbol: str
+    qr_content: str  # Content for QR code (usually just the address)
+    min_recharge: str | None = None
+    confirmations: int
+    assigned_at: str | None = None
+
+
 class CollectTaskResponse(BaseModel):
     """Collection task response."""
 
@@ -150,38 +164,31 @@ async def get_recharge_order(
     return RechargeOrderDetailResponse(**result)
 
 
-@router.get("/address")
+@router.get("/address", response_model=RechargeAddressResponse)
 async def get_recharge_address(
     user: CurrentUser,
     service: Annotated[RechargeService, Depends(get_recharge_service)],
     chain_code: str = Query(default="tron", description="Blockchain network"),
     token_code: str = Query(default="USDT", description="Token code"),
-) -> dict[str, Any]:
+) -> RechargeAddressResponse:
     """Get or allocate a recharge address for the merchant.
 
     If the merchant already has a recharge address for this chain+token,
     returns the existing address. Otherwise, allocates a new one from the pool.
     """
-    recharge_address = await service.get_or_assign_address(
+    result = await service.get_recharge_address_details(
         user=user,
         chain_code=chain_code,
         token_code=token_code,
     )
 
-    if not recharge_address:
+    if not result:
         raise HTTPException(
             status_code=503,
             detail="No recharge addresses available. Please contact support.",
         )
 
-    return {
-        "address": recharge_address.wallet.address if recharge_address.wallet else "",
-        "chain": chain_code,
-        "token": token_code,
-        "assigned_at": recharge_address.assigned_at.isoformat()
-        if recharge_address.assigned_at
-        else None,
-    }
+    return RechargeAddressResponse(**result)
 
 
 # ============ Admin Endpoints ============

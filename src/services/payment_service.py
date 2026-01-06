@@ -721,9 +721,10 @@ class PaymentService:
         query = (
             select(Wallet)
             .where(
+                Wallet.user_id == merchant_id,
                 Wallet.chain_id == chain_id,
                 Wallet.is_active == True,  # noqa: E712
-                Wallet.wallet_type == WalletType.DEPOSIT,
+                Wallet.wallet_type == WalletType.MERCHANT,
             )
             .order_by(Wallet.created_at)
             .limit(1)

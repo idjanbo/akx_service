@@ -1,8 +1,8 @@
 """init
 
-Revision ID: 7e2dc1b72a53
+Revision ID: 093cc7a50c77
 Revises:
-Create Date: 2026-01-07 01:24:49.169870
+Create Date: 2026-01-07 02:32:52.400600
 
 """
 
@@ -16,7 +16,7 @@ import sqlmodel
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = "7e2dc1b72a53"
+revision: str = "093cc7a50c77"
 down_revision: str | Sequence[str] | None = None
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
@@ -264,7 +264,7 @@ def upgrade() -> None:
         ),
         sa.Column(
             "wallet_type",
-            sa.Enum("RECHARGE", "HOT", "GAS", "COLD", name="wallettype"),
+            sa.Enum("MERCHANT", "RECHARGE", "HOT", "GAS", "COLD", name="wallettype"),
             nullable=False,
         ),
         sa.Column("is_active", sa.Boolean(), nullable=False),
@@ -347,56 +347,6 @@ def upgrade() -> None:
     )
     op.create_index(
         op.f("ix_balance_ledgers_user_id"), "balance_ledgers", ["user_id"], unique=False
-    )
-    op.create_table(
-        "payment_channels",
-        sa.Column("id", sa.Integer(), nullable=False),
-        sa.Column("user_id", sa.Integer(), nullable=False),
-        sa.Column("wallet_id", sa.Integer(), nullable=False),
-        sa.Column("token_id", sa.Integer(), nullable=False),
-        sa.Column("chain_id", sa.Integer(), nullable=False),
-        sa.Column(
-            "status", sa.Enum("ACTIVE", "PAUSED", "DISABLED", name="channelstatus"), nullable=False
-        ),
-        sa.Column("min_amount", sa.Numeric(precision=32, scale=8), nullable=False),
-        sa.Column("max_amount", sa.Numeric(precision=32, scale=8), nullable=False),
-        sa.Column("daily_limit", sa.Numeric(precision=32, scale=8), nullable=False),
-        sa.Column("balance_limit", sa.Numeric(precision=32, scale=8), nullable=False),
-        sa.Column("daily_used", sa.Numeric(precision=32, scale=8), nullable=False),
-        sa.Column("last_reset_date", sa.DateTime(), nullable=True),
-        sa.Column("priority", sa.Integer(), nullable=False),
-        sa.Column("label", sqlmodel.sql.sqltypes.AutoString(length=255), nullable=True),
-        sa.Column("created_at", sa.DateTime(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(), nullable=False),
-        sa.ForeignKeyConstraint(
-            ["chain_id"],
-            ["chains.id"],
-        ),
-        sa.ForeignKeyConstraint(
-            ["token_id"],
-            ["tokens.id"],
-        ),
-        sa.ForeignKeyConstraint(
-            ["user_id"],
-            ["users.id"],
-        ),
-        sa.ForeignKeyConstraint(
-            ["wallet_id"],
-            ["wallets.id"],
-        ),
-        sa.PrimaryKeyConstraint("id"),
-    )
-    op.create_index(
-        op.f("ix_payment_channels_chain_id"), "payment_channels", ["chain_id"], unique=False
-    )
-    op.create_index(
-        op.f("ix_payment_channels_token_id"), "payment_channels", ["token_id"], unique=False
-    )
-    op.create_index(
-        op.f("ix_payment_channels_user_id"), "payment_channels", ["user_id"], unique=False
-    )
-    op.create_index(
-        op.f("ix_payment_channels_wallet_id"), "payment_channels", ["wallet_id"], unique=False
     )
     op.create_table(
         "recharge_addresses",
@@ -651,11 +601,6 @@ def downgrade() -> None:
     op.drop_index(op.f("ix_recharge_addresses_status"), table_name="recharge_addresses")
     op.drop_index(op.f("ix_recharge_addresses_chain_id"), table_name="recharge_addresses")
     op.drop_table("recharge_addresses")
-    op.drop_index(op.f("ix_payment_channels_wallet_id"), table_name="payment_channels")
-    op.drop_index(op.f("ix_payment_channels_user_id"), table_name="payment_channels")
-    op.drop_index(op.f("ix_payment_channels_token_id"), table_name="payment_channels")
-    op.drop_index(op.f("ix_payment_channels_chain_id"), table_name="payment_channels")
-    op.drop_table("payment_channels")
     op.drop_index(op.f("ix_balance_ledgers_user_id"), table_name="balance_ledgers")
     op.drop_index(op.f("ix_balance_ledgers_order_id"), table_name="balance_ledgers")
     op.drop_index(op.f("ix_balance_ledgers_operator_id"), table_name="balance_ledgers")

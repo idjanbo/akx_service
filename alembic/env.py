@@ -33,7 +33,6 @@ from src.models.chain import Chain  # noqa: F401, E402
 from src.models.fee_config import FeeConfig  # noqa: F401, E402
 from src.models.ledger import BalanceLedger  # noqa: F401, E402
 from src.models.order import Order  # noqa: F401, E402
-from src.models.payment_channel import PaymentChannel  # noqa: F401, E402
 from src.models.recharge import CollectTask, RechargeAddress, RechargeOrder  # noqa: F401, E402
 from src.models.token import Token, TokenChainSupport  # noqa: F401, E402
 from src.models.user import User  # noqa: F401, E402

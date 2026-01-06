@@ -7,7 +7,6 @@ from src.models.ledger import (
     BalanceLedger,
 )
 from src.models.order import CallbackStatus, Order, OrderStatus, OrderType
-from src.models.payment_channel import ChannelStatus, PaymentChannel
 from src.models.recharge import (
     CollectTask,
     CollectTaskStatus,
@@ -43,10 +42,7 @@ __all__ = [
     "OrderType",
     "OrderStatus",
     "CallbackStatus",
-    # Payment Channel
-    "PaymentChannel",
-    "ChannelStatus",
-    # Chain & Token (New)
+    # Chain & Token
     "Chain",
     "Token",
     "TokenChainSupport",

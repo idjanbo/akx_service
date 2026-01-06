@@ -260,6 +260,51 @@ class RechargeService:
         await self.db.refresh(available)
         return available
 
+    async def get_recharge_address_details(
+        self,
+        user: User,
+        chain_code: str = "tron",
+        token_code: str = "USDT",
+    ) -> dict[str, Any] | None:
+        """Get recharge address with full details for API response.
+
+        Args:
+            user: Merchant user
+            chain_code: Blockchain network
+            token_code: Token code
+
+        Returns:
+            Dict with address details including chain/token info, or None if unavailable
+        """
+        # Get or assign address
+        recharge_address = await self.get_or_assign_address(user, chain_code, token_code)
+        if not recharge_address:
+            return None
+
+        # Eager load relationships
+        await self.db.refresh(recharge_address, ["wallet", "chain", "token"])
+
+        chain = recharge_address.chain
+        token = recharge_address.token
+        wallet = recharge_address.wallet
+
+        if not wallet or not chain or not token:
+            return None
+
+        return {
+            "address": wallet.address,
+            "chain_code": chain.code,
+            "chain_name": chain.name,
+            "token_code": token.code,
+            "token_symbol": token.symbol,
+            "qr_content": wallet.address,  # QR code content is just the address
+            "min_recharge": None,  # Can be configured per chain if needed
+            "confirmations": chain.confirmation_blocks,
+            "assigned_at": recharge_address.assigned_at.isoformat()
+            if recharge_address.assigned_at
+            else None,
+        }
+
     # ============ Recharge Order Management ============
 
     async def create_recharge_order(

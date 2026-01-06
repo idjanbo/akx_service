@@ -8,17 +8,15 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from src.api import register_routers
 from src.core.config import get_settings
-from src.db import close_db, init_db
+from src.db import close_db
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan handler.
 
-    Startup: Initialize database tables
     Shutdown: Close database connections
     """
-    await init_db()
     yield
     await close_db()
 

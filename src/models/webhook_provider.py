@@ -89,10 +89,10 @@ class WebhookProvider(SQLModel, table=True):
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
-    # Relationships
+    # Relationships - use selectin to avoid async lazy-load issues
     chain_supports: list["WebhookProviderChain"] = Relationship(
         back_populates="provider",
-        sa_relationship_kwargs={"cascade": "all, delete-orphan"},
+        sa_relationship_kwargs={"cascade": "all, delete-orphan", "lazy": "selectin"},
     )
 
     class Config:
@@ -147,9 +147,15 @@ class WebhookProviderChain(SQLModel, table=True):
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
-    # Relationships
-    provider: WebhookProvider = Relationship(back_populates="chain_supports")
-    chain: "Chain" = Relationship(back_populates="webhook_providers")
+    # Relationships - use selectin to avoid async lazy-load issues
+    provider: WebhookProvider = Relationship(
+        back_populates="chain_supports",
+        sa_relationship_kwargs={"lazy": "selectin"},
+    )
+    chain: "Chain" = Relationship(
+        back_populates="webhook_providers",
+        sa_relationship_kwargs={"lazy": "selectin"},
+    )
 
 
 # Import Chain for type hints

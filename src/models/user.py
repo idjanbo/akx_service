@@ -72,6 +72,9 @@ class User(SQLModel, table=True):
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
-    # Relationships
+    # Relationships - use selectin for fee_config to avoid async lazy-load issues
     wallets: list["Wallet"] = Relationship(back_populates="user")
-    fee_config: Optional["FeeConfig"] = Relationship(back_populates="users")
+    fee_config: Optional["FeeConfig"] = Relationship(
+        back_populates="users",
+        sa_relationship_kwargs={"lazy": "selectin"},
+    )

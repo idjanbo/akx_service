@@ -5,7 +5,6 @@ import logging
 from datetime import datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 from sqlmodel import select
 
 from src.core.security import decrypt_sensitive_data, encrypt_sensitive_data
@@ -47,9 +46,7 @@ class WebhookProviderService:
             Tuple of (providers list, total count)
         """
         # Build query
-        stmt = select(WebhookProvider).options(
-            selectinload(WebhookProvider.chain_supports).selectinload(WebhookProviderChain.chain)
-        )
+        stmt = select(WebhookProvider)
 
         if provider_type:
             stmt = stmt.where(WebhookProvider.provider_type == provider_type)
@@ -81,15 +78,7 @@ class WebhookProviderService:
         Returns:
             Provider response or None if not found
         """
-        stmt = (
-            select(WebhookProvider)
-            .where(WebhookProvider.id == provider_id)
-            .options(
-                selectinload(WebhookProvider.chain_supports).selectinload(
-                    WebhookProviderChain.chain
-                )
-            )
-        )
+        stmt = select(WebhookProvider).where(WebhookProvider.id == provider_id)
         result = await self.db.execute(stmt)
         provider = result.scalars().first()
 
@@ -317,11 +306,6 @@ class WebhookProviderService:
                 WebhookProvider.is_enabled == True,  # noqa: E712
                 WebhookProviderChain.is_enabled == True,  # noqa: E712
                 Chain.code == chain_code,
-            )
-            .options(
-                selectinload(WebhookProvider.chain_supports).selectinload(
-                    WebhookProviderChain.chain
-                )
             )
         )
         result = await self.db.execute(stmt)

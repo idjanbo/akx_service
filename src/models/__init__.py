@@ -3,16 +3,20 @@
 from src.models.chain import Chain
 from src.models.fee_config import FeeConfig
 from src.models.ledger import (
-    AddressTransaction,
-    AddressTransactionType,
     BalanceChangeType,
     BalanceLedger,
-    RechargeRecord,
-    RechargeStatus,
-    RechargeType,
 )
 from src.models.order import CallbackStatus, Order, OrderStatus, OrderType
 from src.models.payment_channel import ChannelStatus, PaymentChannel
+from src.models.recharge import (
+    CollectTask,
+    CollectTaskStatus,
+    RechargeAddress,
+    RechargeAddressStatus,
+    RechargeOrder,
+    RechargeOrderStatus,
+    generate_recharge_order_no,
+)
 from src.models.token import Token, TokenChainSupport
 from src.models.user import User, UserRole
 from src.models.wallet import (
@@ -49,14 +53,17 @@ __all__ = [
     # Wallet
     "Wallet",
     "WalletType",
+    # Recharge (商户在线充值)
+    "RechargeAddress",
+    "RechargeAddressStatus",
+    "RechargeOrder",
+    "RechargeOrderStatus",
+    "CollectTask",
+    "CollectTaskStatus",
+    "generate_recharge_order_no",
     # Ledger
-    "AddressTransaction",
-    "AddressTransactionType",
     "BalanceLedger",
     "BalanceChangeType",
-    "RechargeRecord",
-    "RechargeStatus",
-    "RechargeType",
     # Webhook Provider
     "WebhookProvider",
     "WebhookProviderChain",

@@ -47,6 +47,11 @@ def register_routers(app: FastAPI) -> None:
     app.include_router(payment_channels_router, prefix="/api")
     app.include_router(payment_router)  # Payment API v1 (external)
 
+    # Recharge & Collection (Merchant balance top-up)
+    from src.api.recharges import router as recharges_router
+
+    app.include_router(recharges_router, prefix="/api")
+
     # Ledger & Financial records
     from src.api.fee_configs import router as fee_configs_router
     from src.api.ledger import router as ledger_router

@@ -6,13 +6,11 @@ from src.db.engine import (
     engine,
     get_db,
     get_session,
-    init_db,
 )
 
 __all__ = [
     "engine",
     "async_session_factory",
-    "init_db",
     "close_db",
     "get_session",
     "get_db",

@@ -203,8 +203,8 @@ class Order(SQLModel, table=True):
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
-    # Relationships
-    merchant: Optional["User"] = Relationship()
+    # Relationships - use selectin to avoid async lazy-load issues
+    merchant: Optional["User"] = Relationship(sa_relationship_kwargs={"lazy": "selectin"})
 
     # Composite unique constraint for merchant + out_trade_no
     __table_args__ = (

@@ -3,7 +3,6 @@
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 from sqlmodel import select
 
 from src.core.security import get_cipher
@@ -35,7 +34,7 @@ class WalletService:
     ) -> PaginatedResult[dict[str, Any]]:
         """List wallets with filters and pagination.
 
-        Uses JOINs to avoid N+1 queries.
+        Relationships use lazy='selectin' in model definition.
 
         Args:
             user: Current user (for role-based filtering)
@@ -48,12 +47,7 @@ class WalletService:
         Returns:
             Paginated wallet list with related data
         """
-        # Use eager loading with JOINs to avoid N+1 queries
-        query = select(Wallet).options(
-            selectinload(Wallet.chain),
-            selectinload(Wallet.token),
-            selectinload(Wallet.user),
-        )
+        query = select(Wallet)
 
         # Role-based filtering
         if user.role == UserRole.MERCHANT:

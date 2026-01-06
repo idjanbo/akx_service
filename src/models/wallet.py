@@ -116,7 +116,8 @@ def get_token_decimals_deprecated(token: TokenEnum) -> int:
 class WalletType(str, Enum):
     """Wallet purpose types."""
 
-    DEPOSIT = "deposit"  # Merchant deposit address
+    RECHARGE = "recharge"  # Merchant online recharge address (商户在线充值)
+    HOT = "hot"  # Hot wallet for withdrawals and collections
     GAS = "gas"  # System gas fee wallet
     COLD = "cold"  # Cold storage for collected funds
 
@@ -157,7 +158,7 @@ class Wallet(SQLModel, table=True):
 
     address: str = Field(max_length=255, index=True, unique=True)
     encrypted_private_key: str = Field(max_length=1024)
-    wallet_type: WalletType = Field(default=WalletType.DEPOSIT)
+    wallet_type: WalletType = Field(default=WalletType.RECHARGE)
     is_active: bool = Field(default=True)
     label: str | None = Field(default=None, max_length=255)
 
@@ -167,7 +168,7 @@ class Wallet(SQLModel, table=True):
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
-    # Relationships
+    # Relationships - use selectin to avoid async lazy-load issues
     user: Optional["User"] = Relationship(back_populates="wallets")
-    chain: Optional["Chain"] = Relationship()
-    token: Optional["Token"] = Relationship()
+    chain: Optional["Chain"] = Relationship(sa_relationship_kwargs={"lazy": "selectin"})
+    token: Optional["Token"] = Relationship(sa_relationship_kwargs={"lazy": "selectin"})

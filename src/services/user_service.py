@@ -6,7 +6,6 @@ from decimal import Decimal
 import pyotp
 from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 from sqlmodel import select
 
 from src.core.config import get_settings
@@ -48,11 +47,7 @@ class UserService:
         Returns:
             Paginated user list
         """
-        query = (
-            select(User)
-            .options(selectinload(User.fee_config))
-            .where(User.role != UserRole.SUPER_ADMIN)
-        )
+        query = select(User).where(User.role != UserRole.SUPER_ADMIN)
 
         if search:
             # Escape special LIKE characters to prevent pattern injection
@@ -91,10 +86,7 @@ class UserService:
             User or None
         """
         result = await self.db.execute(
-            select(User)
-            .options(selectinload(User.fee_config))
-            .where(User.id == user_id)
-            .where(User.role != UserRole.SUPER_ADMIN)
+            select(User).where(User.id == user_id).where(User.role != UserRole.SUPER_ADMIN)
         )
         return result.scalar_one_or_none()
 

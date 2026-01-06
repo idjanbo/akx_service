@@ -1,4 +1,4 @@
-"""Initialize ledger tables with sample data.
+"""Initialize balance ledger with sample data.
 
 Run with:
     cd /Users/djanbo/www/akx/akx_service
@@ -14,20 +14,14 @@ from sqlmodel import select
 
 from src.db.engine import close_db, get_session
 from src.models.ledger import (
-    AddressTransaction,
-    AddressTransactionType,
     BalanceChangeType,
     BalanceLedger,
-    RechargeRecord,
-    RechargeStatus,
-    RechargeType,
 )
 from src.models.user import User
-from src.models.wallet import Wallet
 
 
 async def init_ledger_data():
-    """Initialize ledger tables with sample data."""
+    """Initialize balance ledger with sample data."""
     try:
         async with get_session() as db:
             # 获取用户
@@ -40,63 +34,10 @@ async def init_ledger_data():
 
             print(f"✅ 找到 {len(users)} 个用户")
 
-            # 获取钱包
-            wallets_result = await db.execute(select(Wallet).limit(10))
-            wallets = wallets_result.scalars().all()
-
-            print(f"✅ 找到 {len(wallets)} 个钱包")
-
             # 生成时间范围（最近30天）
             now = datetime.utcnow()
 
-            # ============ 1. 创建地址历史记录 ============
-            print("\n📝 创建地址历史记录...")
-            address_transactions = []
-
-            for i in range(20):
-                user = random.choice(users)
-                wallet = random.choice(wallets) if wallets else None
-                tx_type = random.choice(
-                    [AddressTransactionType.INCOME, AddressTransactionType.EXPENSE]
-                )
-                token = random.choice(["USDT", "USDC", "TRX"])
-                chain = random.choice(["tron", "ethereum", "solana"])
-                amount = Decimal(str(round(random.uniform(10, 5000), 2)))
-
-                # 生成随机地址和交易哈希
-                address = f"T{
-                    ''.join(
-                        random.choices(
-                            '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz', k=33
-                        )
-                    )
-                }"
-                tx_hash = f"{''.join(random.choices('0123456789abcdef', k=64))}"
-
-                created_at = now - timedelta(
-                    days=random.randint(0, 30),
-                    hours=random.randint(0, 23),
-                    minutes=random.randint(0, 59),
-                )
-
-                tx = AddressTransaction(
-                    user_id=user.id,
-                    wallet_id=wallet.id if wallet else None,
-                    order_id=None,
-                    tx_type=tx_type,
-                    token=token,
-                    chain=chain,
-                    amount=amount,
-                    address=address,
-                    tx_hash=tx_hash,
-                    created_at=created_at,
-                )
-                address_transactions.append(tx)
-                db.add(tx)
-
-            print(f"   ✅ 创建了 {len(address_transactions)} 条地址历史记录")
-
-            # ============ 2. 创建积分明细 ============
+            # ============ 创建积分明细 ============
             print("\n📝 创建积分明细...")
             balance_ledgers = []
 
@@ -109,22 +50,22 @@ async def init_ledger_data():
                 for j in range(random.randint(5, 10)):
                     change_type = random.choice(
                         [
-                            BalanceChangeType.DEPOSIT_INCOME,
-                            BalanceChangeType.RECHARGE,
-                            BalanceChangeType.FREEZE,
-                            BalanceChangeType.UNFREEZE,
-                            BalanceChangeType.WITHDRAW_EXPENSE,
-                            BalanceChangeType.WITHDRAW_FEE,
-                            BalanceChangeType.MANUAL_ADD,
+                            BalanceChangeType.ONLINE_RECHARGE,
+                            BalanceChangeType.MANUAL_RECHARGE,
                             BalanceChangeType.MANUAL_DEDUCT,
+                            BalanceChangeType.FEE_FREEZE,
+                            BalanceChangeType.FEE_UNFREEZE,
+                            BalanceChangeType.FEE_SETTLE,
+                            BalanceChangeType.REFUND,
+                            BalanceChangeType.ADJUSTMENT,
                         ]
                     )
 
                     # 根据类型计算金额变化
                     if change_type in [
-                        BalanceChangeType.DEPOSIT_INCOME,
-                        BalanceChangeType.RECHARGE,
-                        BalanceChangeType.MANUAL_ADD,
+                        BalanceChangeType.ONLINE_RECHARGE,
+                        BalanceChangeType.MANUAL_RECHARGE,
+                        BalanceChangeType.REFUND,
                     ]:
                         amount = Decimal(str(round(random.uniform(100, 2000), 2)))
                         pre_balance = balance
@@ -133,7 +74,7 @@ async def init_ledger_data():
                         frozen_amount = Decimal("0")
                         pre_frozen = frozen
                         post_frozen = frozen
-                    elif change_type == BalanceChangeType.FREEZE:
+                    elif change_type == BalanceChangeType.FEE_FREEZE:
                         amount = Decimal(str(round(random.uniform(50, 500), 2)))
                         pre_balance = balance
                         post_balance = balance - amount
@@ -142,7 +83,7 @@ async def init_ledger_data():
                         pre_frozen = frozen
                         post_frozen = frozen + amount
                         frozen = post_frozen
-                    elif change_type == BalanceChangeType.UNFREEZE:
+                    elif change_type == BalanceChangeType.FEE_UNFREEZE:
                         if frozen > 0:
                             amount = min(Decimal(str(round(random.uniform(50, 200), 2))), frozen)
                             pre_balance = balance
@@ -154,7 +95,7 @@ async def init_ledger_data():
                             frozen = post_frozen
                         else:
                             continue
-                    else:  # 支出类
+                    else:  # 支出类 (MANUAL_DEDUCT, FEE_SETTLE)
                         amount = -Decimal(str(round(random.uniform(50, 500), 2)))
                         pre_balance = balance
                         post_balance = max(balance + amount, Decimal("0"))
@@ -170,14 +111,14 @@ async def init_ledger_data():
                     )
 
                     remarks = {
-                        BalanceChangeType.DEPOSIT_INCOME: "用户充值成功",
-                        BalanceChangeType.RECHARGE: "管理员充值",
-                        BalanceChangeType.FREEZE: "提现申请冻结",
-                        BalanceChangeType.UNFREEZE: "提现失败解冻",
-                        BalanceChangeType.WITHDRAW_EXPENSE: "提现成功扣款",
-                        BalanceChangeType.WITHDRAW_FEE: "提现手续费",
-                        BalanceChangeType.MANUAL_ADD: "人工补款",
+                        BalanceChangeType.ONLINE_RECHARGE: "在线充值",
+                        BalanceChangeType.MANUAL_RECHARGE: "人工充值",
                         BalanceChangeType.MANUAL_DEDUCT: "人工扣款",
+                        BalanceChangeType.FEE_FREEZE: "手续费冻结",
+                        BalanceChangeType.FEE_UNFREEZE: "手续费解冻",
+                        BalanceChangeType.FEE_SETTLE: "手续费结算",
+                        BalanceChangeType.REFUND: "退款",
+                        BalanceChangeType.ADJUSTMENT: "调账",
                     }
 
                     ledger = BalanceLedger(
@@ -194,9 +135,9 @@ async def init_ledger_data():
                         operator_id=users[0].id
                         if change_type
                         in [
-                            BalanceChangeType.MANUAL_ADD,
+                            BalanceChangeType.MANUAL_RECHARGE,
                             BalanceChangeType.MANUAL_DEDUCT,
-                            BalanceChangeType.RECHARGE,
+                            BalanceChangeType.ADJUSTMENT,
                         ]
                         else None,
                         created_at=created_at,
@@ -205,72 +146,6 @@ async def init_ledger_data():
                     db.add(ledger)
 
             print(f"   ✅ 创建了 {len(balance_ledgers)} 条积分明细")
-
-            # ============ 3. 创建充值记录 ============
-            print("\n📝 创建充值记录...")
-            recharge_records = []
-
-            for i in range(15):
-                user = random.choice(users)
-                recharge_type = random.choice(
-                    [
-                        RechargeType.ONLINE,
-                        RechargeType.MANUAL,
-                        RechargeType.DEDUCT,
-                    ]
-                )
-                status = random.choice(
-                    [
-                        RechargeStatus.PENDING,
-                        RechargeStatus.SUCCESS,
-                        RechargeStatus.SUCCESS,  # 增加成功的概率
-                        RechargeStatus.SUCCESS,
-                        RechargeStatus.FAILED,
-                        RechargeStatus.CANCELLED,
-                    ]
-                )
-
-                if recharge_type == RechargeType.DEDUCT:
-                    amount = -Decimal(str(round(random.uniform(50, 500), 2)))
-                else:
-                    amount = Decimal(str(round(random.uniform(100, 5000), 2)))
-
-                created_at = now - timedelta(
-                    days=random.randint(0, 30),
-                    hours=random.randint(0, 23),
-                    minutes=random.randint(0, 59),
-                )
-
-                completed_at = None
-                if status in [RechargeStatus.SUCCESS, RechargeStatus.FAILED]:
-                    completed_at = created_at + timedelta(minutes=random.randint(1, 60))
-
-                # 生成充值单号
-                recharge_no = (
-                    f"RCH{created_at.strftime('%Y%m%d%H%M%S')}{random.randint(1000, 9999)}"
-                )
-
-                remarks = {
-                    RechargeType.ONLINE: "在线充值",
-                    RechargeType.MANUAL: "管理员手动充值",
-                    RechargeType.DEDUCT: "管理员扣款",
-                }
-
-                record = RechargeRecord(
-                    user_id=user.id,
-                    recharge_no=recharge_no,
-                    recharge_type=recharge_type,
-                    amount=amount,
-                    status=status,
-                    remark=remarks.get(recharge_type, ""),
-                    operator_id=users[0].id if recharge_type != RechargeType.ONLINE else None,
-                    completed_at=completed_at,
-                    created_at=created_at,
-                )
-                recharge_records.append(record)
-                db.add(record)
-
-            print(f"   ✅ 创建了 {len(recharge_records)} 条充值记录")
 
             # 提交事务
             await db.commit()

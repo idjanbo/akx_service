@@ -5,7 +5,6 @@ from typing import Any
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 from sqlmodel import col
 
 from src.models.order import CallbackStatus, Order, OrderStatus, OrderType
@@ -78,9 +77,6 @@ class OrderService:
         # Apply pagination and ordering
         query = query.order_by(col(Order.created_at).desc())
         query = query.offset((page - 1) * page_size).limit(page_size)
-
-        # Eagerly load merchant relationship
-        query = query.options(selectinload(Order.merchant))
 
         # Execute query
         result = await self.db.execute(query)

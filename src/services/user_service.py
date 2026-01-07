@@ -1,6 +1,6 @@
 """User Service - Business logic for user management."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 
 import pyotp
@@ -111,7 +111,7 @@ class UserService:
             return None
 
         user.role = role
-        user.updated_at = datetime.now(datetime.UTC)
+        user.updated_at = datetime.now(timezone.utc)
         self.db.add(user)
         await self.db.commit()
         await self.db.refresh(user)
@@ -132,7 +132,7 @@ class UserService:
             return None
 
         user.is_active = is_active
-        user.updated_at = datetime.now(datetime.UTC)
+        user.updated_at = datetime.now(timezone.utc)
         self.db.add(user)
         await self.db.commit()
         await self.db.refresh(user)
@@ -153,7 +153,7 @@ class UserService:
             return None
 
         user.balance = balance
-        user.updated_at = datetime.now(datetime.UTC)
+        user.updated_at = datetime.now(timezone.utc)
         self.db.add(user)
         await self.db.commit()
         await self.db.refresh(user)
@@ -180,7 +180,7 @@ class UserService:
             return None
 
         user.credit_limit = credit_limit
-        user.updated_at = datetime.now(datetime.UTC)
+        user.updated_at = datetime.now(timezone.utc)
         self.db.add(user)
         await self.db.commit()
         await self.db.refresh(user)
@@ -209,7 +209,7 @@ class UserService:
                 raise ValueError("Fee config not found")
 
         user.fee_config_id = fee_config_id
-        user.updated_at = datetime.now(datetime.UTC)
+        user.updated_at = datetime.now(timezone.utc)
         self.db.add(user)
         await self.db.commit()
         await self.db.refresh(user)
@@ -230,7 +230,7 @@ class UserService:
 
         new_key = generate_api_key()
         user.deposit_key = new_key
-        user.updated_at = datetime.now(datetime.UTC)
+        user.updated_at = datetime.now(timezone.utc)
         self.db.add(user)
         await self.db.commit()
         return new_key
@@ -250,7 +250,7 @@ class UserService:
 
         new_key = generate_api_key()
         user.withdraw_key = new_key
-        user.updated_at = datetime.now(datetime.UTC)
+        user.updated_at = datetime.now(timezone.utc)
         self.db.add(user)
         await self.db.commit()
         return new_key
@@ -274,7 +274,7 @@ class UserService:
         cipher = _get_cipher()
         encrypted_secret = cipher.encrypt(f"pending:{secret}")
         user.google_secret = encrypted_secret
-        user.updated_at = datetime.now(datetime.UTC)
+        user.updated_at = datetime.now(timezone.utc)
         self.db.add(user)
         await self.db.commit()
 

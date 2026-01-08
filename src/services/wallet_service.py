@@ -3,6 +3,7 @@
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 from sqlmodel import select
 
 from src.core.security import get_cipher
@@ -31,6 +32,8 @@ class WalletService:
         token_id: int | None = None,
         source: str | None = None,
         is_active: bool | None = None,
+        search: str | None = None,
+        user_id: int | None = None,
     ) -> PaginatedResult[dict[str, Any]]:
         """List wallets with filters and pagination.
 
@@ -43,14 +46,29 @@ class WalletService:
             token_id: Filter by token ID
             source: Filter by source (SYSTEM_GENERATED/MANUAL_IMPORT)
             is_active: Filter by active status
+            search: Search by address or remark
+            user_id: Filter by user ID (admin only)
 
         Returns:
             Paginated wallet list with related data
         """
-        query = select(Wallet)
+        query = select(Wallet).options(
+            selectinload(Wallet.user),
+            selectinload(Wallet.chain),
+            selectinload(Wallet.token),
+        )
 
-        # All users can only see their own wallets
-        query = query.where(Wallet.user_id == user.id)
+        # Role-based access control
+        if user.role == "super_admin":
+            # Super admin can see all wallets, optionally filter by user_id
+            if user_id:
+                query = query.where(Wallet.user_id == user_id)
+        else:
+            # Other users see their own wallets (support users see parent merchant's wallets)
+            effective_user_id = user.get_effective_user_id()
+            query = query.where(Wallet.user_id == effective_user_id)
+            # Hide RECHARGE type wallets from non-admin users
+            query = query.where(Wallet.wallet_type != WalletType.RECHARGE)
 
         # Apply filters
         if chain_id:
@@ -62,6 +80,13 @@ class WalletService:
                 query = query.where(Wallet.wallet_type == WalletType.MERCHANT)
             elif source == "MANUAL_IMPORT":
                 query = query.where(Wallet.wallet_type == WalletType.MERCHANT)
+        if is_active is not None:
+            query = query.where(Wallet.is_active == is_active)
+        if search:
+            search_pattern = f"%{search}%"
+            query = query.where(
+                (Wallet.address.ilike(search_pattern)) | (Wallet.remark.ilike(search_pattern))
+            )
         if is_active is not None:
             query = query.where(Wallet.is_active == is_active)
 
@@ -94,8 +119,8 @@ class WalletService:
         if not wallet:
             return None
 
-        # All users can only access their own wallets
-        if wallet.user_id != user.id:
+        # Role-based access control
+        if user.role != "super_admin" and wallet.user_id != user.id:
             return None
 
         chain = await self.db.get(Chain, wallet.chain_id)
@@ -155,7 +180,8 @@ class WalletService:
         # Verify token if provided, or default to USDT
         resolved_token_id = await self._resolve_token_id(token_id)
 
-        # Generate wallets
+        # Generate wallets (support users create wallets for their parent merchant)
+        effective_user_id = user.get_effective_user_id()
         cipher = get_cipher()
         created_wallets: list[Wallet] = []
 
@@ -164,7 +190,7 @@ class WalletService:
             encrypted_pk = cipher.encrypt(private_key)
 
             wallet = Wallet(
-                user_id=user.id,
+                user_id=effective_user_id,
                 chain_id=chain_id,
                 token_id=resolved_token_id,
                 address=address,
@@ -223,12 +249,13 @@ class WalletService:
         if not validate_address_for_chain(chain.code, address):
             raise ValueError(f"Invalid address format for {chain.name}")
 
-        # Encrypt and create
+        # Encrypt and create (support users import wallets for their parent merchant)
+        effective_user_id = user.get_effective_user_id()
         cipher = get_cipher()
         encrypted_pk = cipher.encrypt(private_key)
 
         wallet = Wallet(
-            user_id=user.id,
+            user_id=effective_user_id,
             chain_id=chain_id,
             token_id=resolved_token_id,
             address=address,
@@ -292,6 +319,7 @@ class WalletService:
 
         Raises:
             ValueError: If wallet has non-zero balance
+            ValueError: If trying to delete RECHARGE type wallet
         """
         wallet = await self.db.get(Wallet, wallet_id)
         if not wallet:
@@ -300,6 +328,10 @@ class WalletService:
         # All users can only delete their own wallets
         if wallet.user_id != user.id:
             return False
+
+        # Prevent deletion of RECHARGE type wallets (system-managed)
+        if wallet.wallet_type == WalletType.RECHARGE:
+            raise ValueError("Cannot delete recharge wallets (system-managed)")
 
         if wallet.balance and wallet.balance != "0":
             raise ValueError("Cannot delete wallet with non-zero balance")
@@ -319,10 +351,11 @@ class WalletService:
         Returns:
             Asset summary with balance, trends, and grouped addresses
         """
-        # Get all active wallets for current user
+        # Get all active wallets for current user (support users see parent merchant's data)
+        effective_user_id = user.get_effective_user_id()
         query = select(Wallet).where(
             Wallet.is_active == True,  # noqa: E712
-            Wallet.user_id == user.id,
+            Wallet.user_id == effective_user_id,
         )
 
         result = await self.db.execute(query)

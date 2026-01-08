@@ -53,26 +53,6 @@ class RechargeOrderDetailResponse(BaseModel):
     created_at: str | None
 
 
-class PoolStatsResponse(BaseModel):
-    """Address pool statistics response."""
-
-    chain: str
-    token: str
-    total: int
-    available: int
-    assigned: int
-    locked: int
-    disabled: int
-
-
-class GeneratePoolRequest(BaseModel):
-    """Generate address pool request."""
-
-    count: int = Field(default=10, ge=1, le=100, description="Number of addresses to generate")
-    chain_code: str = Field(default="tron", description="Blockchain network")
-    token_code: str = Field(default="USDT", description="Token code")
-
-
 class RechargeAddressResponse(BaseModel):
     """Recharge address response for online recharge."""
 
@@ -171,10 +151,10 @@ async def get_recharge_address(
     chain_code: str = Query(default="tron", description="Blockchain network"),
     token_code: str = Query(default="USDT", description="Token code"),
 ) -> RechargeAddressResponse:
-    """Get or allocate a recharge address for the merchant.
+    """Get or create a recharge address for the merchant.
 
     If the merchant already has a recharge address for this chain+token,
-    returns the existing address. Otherwise, allocates a new one from the pool.
+    returns the existing address. Otherwise, generates a new one.
     """
     result = await service.get_recharge_address_details(
         user=user,
@@ -185,48 +165,13 @@ async def get_recharge_address(
     if not result:
         raise HTTPException(
             status_code=503,
-            detail="No recharge addresses available. Please contact support.",
+            detail="Failed to create recharge address. Please contact support.",
         )
 
     return RechargeAddressResponse(**result)
 
 
 # ============ Admin Endpoints ============
-
-
-@router.get("/admin/pool/stats", response_model=PoolStatsResponse)
-async def get_pool_stats(
-    _user: SuperAdmin,
-    service: Annotated[RechargeService, Depends(get_recharge_service)],
-    chain_code: str = Query(default="tron"),
-    token_code: str = Query(default="USDT"),
-) -> PoolStatsResponse:
-    """Get address pool statistics (admin only)."""
-    stats = await service.get_pool_stats(chain_code=chain_code, token_code=token_code)
-    return PoolStatsResponse(**stats)
-
-
-@router.post("/admin/pool/generate")
-async def generate_address_pool(
-    data: GeneratePoolRequest,
-    _user: SuperAdmin,
-    service: Annotated[RechargeService, Depends(get_recharge_service)],
-) -> dict[str, Any]:
-    """Generate addresses for the recharge pool (admin only)."""
-    try:
-        addresses = await service.generate_address_pool(
-            count=data.count,
-            chain_code=data.chain_code,
-            token_code=data.token_code,
-        )
-        return {
-            "message": f"Generated {len(addresses)} addresses",
-            "count": len(addresses),
-            "chain": data.chain_code,
-            "token": data.token_code,
-        }
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @router.get("/admin/orders", response_model=list[RechargeOrderDetailResponse])

@@ -21,10 +21,10 @@
 │           ┌──────────────────┼──────────────────┐                          │
 │           ▼                  ▼                  ▼                          │
 │  ┌─────────────────┐ ┌─────────────────┐ ┌─────────────────┐              │
-│  │   地址池管理     │ │   订单管理      │ │   到账处理       │              │
-│  │ - 预生成地址     │ │ - 创建订单      │ │ - 检测交易       │              │
+│  │   地址管理       │ │   订单管理      │ │   到账处理       │              │
+│  │ - 实时生成地址   │ │ - 创建订单      │ │ - 检测交易       │              │
 │  │ - 分配给用户     │ │ - 状态更新      │ │ - 确认数检查     │              │
-│  │ - 回收地址       │ │ - 过期处理      │ │ - 入账余额       │              │
+│  │                 │ │ - 过期处理      │ │ - 入账余额       │              │
 │  └─────────────────┘ └─────────────────┘ └─────────────────┘              │
 │                                                                             │
 │  ┌─────────────────────────────────────────────────────────────────────┐   │
@@ -46,7 +46,7 @@
 
 ## 数据库模型
 
-### 1. RechargeAddress (充值地址池)
+### 1. RechargeAddress (充值地址)
 ```sql
 CREATE TABLE recharge_addresses (
     id INT PRIMARY KEY,
@@ -110,8 +110,6 @@ CREATE TABLE collect_tasks (
 
 | 方法 | 路径 | 描述 |
 |------|------|------|
-| GET | `/api/recharges/admin/pool/stats` | 地址池统计 |
-| POST | `/api/recharges/admin/pool/generate` | 生成地址池 |
 | GET | `/api/recharges/admin/orders` | 所有订单列表 |
 | POST | `/api/recharges/admin/expire-orders` | 过期订单处理 |
 | GET | `/api/recharges/admin/collect/tasks` | 归集任务列表 |
@@ -121,28 +119,22 @@ CREATE TABLE collect_tasks (
 
 ## 使用流程
 
-### 1. 初始化地址池
-```bash
-# 生成 20 个 TRON 充值地址
-uv run python -m src.scripts.init_recharge_pool --count 20 --chain tron --token USDT
-```
-
-### 2. 用户充值流程
+### 1. 用户充值流程
 1. 用户访问在线充值页面
 2. 选择币种和网络（USDT-TRON）
-3. 系统自动分配专属充值地址
+3. 系统实时生成专属充值地址（首次）或返回已有地址
 4. 用户向该地址转账
 5. 系统监控链上交易
 6. 检测到转账后，等待 19 个确认
 7. 确认完成后，自动入账用户余额
 
-### 3. 启动链上监控
+### 2. 启动链上监控
 ```bash
 # 后台运行监控脚本
 uv run python -m src.scripts.recharge_monitor
 ```
 
-### 4. 资金归集
+### 3. 资金归集
 ```bash
 # 扫描并创建归集任务
 uv run python -m src.scripts.collect_funds --action scan --hot-wallet-id 1
@@ -187,7 +179,6 @@ src/
 ├── api/
 │   └── recharges.py        # API 端点
 └── scripts/
-    ├── init_recharge_pool.py  # 初始化地址池
     ├── recharge_monitor.py    # 链上监控
     └── collect_funds.py       # 归集执行
 ```

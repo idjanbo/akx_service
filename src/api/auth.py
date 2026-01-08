@@ -54,27 +54,39 @@ class ClerkAuth:
                 detail=f"Authentication failed: {e!s}",
             ) from e
 
-    def get_user_email(self, clerk_id: str) -> str:
-        """Fetch user email from Clerk API.
+    def get_user_info(self, clerk_id: str) -> dict[str, str]:
+        """Fetch user info from Clerk API.
 
         Args:
             clerk_id: Clerk user ID (e.g., user_xxx)
 
         Returns:
-            User's primary email address
+            Dict with email and username
         """
         try:
             user = self._client.users.get(user_id=clerk_id)
-            # Return primary email or first available email
+            email = ""
+            username = ""
+
+            # Get primary email or first available email
             if user.email_addresses:
                 primary = next(
                     (e for e in user.email_addresses if e.id == user.primary_email_address_id),
                     user.email_addresses[0],
                 )
-                return primary.email_address
-            return ""
+                email = primary.email_address
+
+            # Get username (Clerk stores it as username field)
+            if user.username:
+                username = user.username
+
+            return {"email": email, "username": username}
         except Exception:
-            return ""
+            return {"email": "", "username": ""}
+
+    def get_user_email(self, clerk_id: str) -> str:
+        """Fetch user email from Clerk API (legacy, use get_user_info instead)."""
+        return self.get_user_info(clerk_id).get("email", "")
 
 
 # Singleton instance
@@ -117,22 +129,29 @@ async def get_current_user(
     user = result.scalar_one_or_none()
 
     if not user:
-        # Sync user from Clerk to local DB - fetch email from Clerk API
-        email = clerk.get_user_email(clerk_id)
+        # Sync user from Clerk to local DB - fetch info from Clerk API
+        user_info = clerk.get_user_info(clerk_id)
         user = User(
             clerk_id=clerk_id,
-            email=email,
+            email=user_info.get("email", ""),
+            username=user_info.get("username") or None,
             role=UserRole.GUEST,  # Default role for new users
             is_active=True,
         )
         db.add(user)
         await db.commit()
         await db.refresh(user)
-    elif not user.email:
-        # Update email if missing (for existing users)
-        email = clerk.get_user_email(clerk_id)
-        if email:
-            user.email = email
+    else:
+        # Update email/username if changed (sync from Clerk)
+        user_info = clerk.get_user_info(clerk_id)
+        updated = False
+        if user_info.get("email") and user.email != user_info["email"]:
+            user.email = user_info["email"]
+            updated = True
+        if user_info.get("username") and user.username != user_info["username"]:
+            user.username = user_info["username"]
+            updated = True
+        if updated:
             db.add(user)
             await db.commit()
             await db.refresh(user)

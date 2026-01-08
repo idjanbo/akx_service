@@ -116,11 +116,11 @@ def get_token_decimals_deprecated(token: TokenEnum) -> int:
 class WalletType(str, Enum):
     """Wallet purpose types."""
 
-    MERCHANT = "merchant"  # Merchant payment receiving address (商户收款地址)
-    RECHARGE = "recharge"  # Merchant online recharge address (商户在线充值)
-    HOT = "hot"  # Hot wallet for withdrawals and collections
-    GAS = "gas"  # System gas fee wallet
-    COLD = "cold"  # Cold storage for collected funds
+    MERCHANT = "MERCHANT"  # Merchant payment receiving address (商户收款地址)
+    RECHARGE = "RECHARGE"  # Merchant online recharge address (商户在线充值)
+    HOT = "HOT"  # Hot wallet for withdrawals and collections
+    GAS = "GAS"  # System gas fee wallet
+    COLD = "COLD"  # Cold storage for collected funds
 
 
 class Wallet(SQLModel, table=True):

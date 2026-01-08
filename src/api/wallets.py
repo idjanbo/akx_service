@@ -172,13 +172,15 @@ async def list_wallets(
     token_id: int | None = None,
     source: str | None = None,
     is_active: bool | None = None,
+    search: str | None = Query(None, description="Search by address or remark"),
+    user_id: int | None = Query(None, description="Filter by user ID (admin only)"),
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=100)] = 20,
 ) -> PaginatedWalletsResponse:
     """List wallets with filters.
 
     Merchants can only see their own wallets.
-    Admins can see all wallets.
+    Admins can see all wallets and filter by user_id.
     """
     params = PaginationParams(page=page, page_size=page_size)
     result = await service.list_wallets(
@@ -188,6 +190,8 @@ async def list_wallets(
         token_id=token_id,
         source=source,
         is_active=is_active,
+        search=search,
+        user_id=user_id,
     )
     return PaginatedWalletsResponse(
         items=[WalletResponse(**item) for item in result.items],
@@ -208,7 +212,7 @@ async def generate_wallets(
     This creates system-generated deposit wallets.
     """
     try:
-        wallets = await service.generate_wallets(
+        wallets, chain = await service.generate_wallets(
             user=user,
             chain_id=request.chain_id,
             count=request.count,
@@ -220,8 +224,29 @@ async def generate_wallets(
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=error_msg)
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error_msg)
 
+    # Convert Wallet objects to response dicts
+    wallet_responses = []
+    for w in wallets:
+        wallet_responses.append(
+            WalletResponse(
+                id=w.id,
+                chain_id=w.chain_id,
+                chain_name=chain.name,
+                token_id=w.token_id,
+                token_symbol=None,  # TODO: get from token
+                address=w.address,
+                source="SYSTEM_GENERATED",
+                balance=w.balance,
+                merchant_id=w.user_id,
+                merchant_name=None,  # TODO: get from user
+                remark=w.label,
+                is_active=w.is_active,
+                created_at=w.created_at.isoformat(),
+            )
+        )
+
     return GenerateWalletsResponse(
-        wallets=[WalletResponse(**w) for w in wallets],
+        wallets=wallet_responses,
         count=len(wallets),
     )
 

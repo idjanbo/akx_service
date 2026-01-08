@@ -1,7 +1,7 @@
 """Recharge Service - Business logic for merchant online recharge (商户在线充值) operations.
 
 This service handles:
-1. Address Pool Management - Pre-generate and assign recharge addresses
+1. Address Management - Generate and assign recharge addresses on demand
 2. Recharge Order Creation - Create orders when merchants initiate balance top-up
 3. Recharge Detection - Process incoming transactions from blockchain
 4. Balance Credit - Credit merchant balance after confirmed recharges
@@ -58,144 +58,74 @@ class RechargeService:
         self.settings = get_settings()
         self.cipher = get_cipher()
 
-    # ============ Address Pool Management ============
+    # ============ Address Management ============
 
-    async def generate_address_pool(
+    async def _generate_recharge_address(
         self,
-        count: int = 10,
-        chain_code: str = "tron",
-        token_code: str = "USDT",
-    ) -> list[RechargeAddress]:
-        """Generate addresses for the recharge pool.
+        user: User,
+        chain: Chain,
+        token: Token,
+    ) -> RechargeAddress:
+        """Generate a new recharge address for a merchant.
 
-        Pre-generates wallet addresses that can be assigned to merchants later.
+        Creates both wallet and recharge address records.
 
         Args:
-            count: Number of addresses to generate
-            chain_code: Blockchain network (default: tron)
-            token_code: Token code (default: USDT)
+            user: Merchant user
+            chain: Chain to generate address for
+            token: Token for the address
 
         Returns:
-            List of created RechargeAddress records
-
-        Raises:
-            ValueError: If chain or token not found
+            Created RechargeAddress
         """
-        # Get chain
-        chain_result = await self.db.execute(
-            select(Chain).where(func.lower(Chain.code) == chain_code.lower())
+        # Generate wallet
+        address, private_key = generate_wallet_for_chain(chain.code)
+        encrypted_key = self.cipher.encrypt(private_key)
+
+        # Create wallet record
+        wallet = Wallet(
+            user_id=user.id,
+            chain_id=chain.id,
+            token_id=token.id,
+            address=address,
+            encrypted_private_key=encrypted_key,
+            wallet_type=WalletType.RECHARGE,
+            is_active=True,
+            label=f"Recharge - {user.email}",
         )
-        chain = chain_result.scalar_one_or_none()
-        if not chain:
-            raise ValueError(f"Chain '{chain_code}' not found")
+        self.db.add(wallet)
+        await self.db.flush()
 
-        # Get token
-        token_result = await self.db.execute(
-            select(Token).where(func.upper(Token.code) == token_code.upper())
+        # Create recharge address record
+        recharge_address = RechargeAddress(
+            wallet_id=wallet.id,
+            user_id=user.id,
+            chain_id=chain.id,
+            token_id=token.id,
+            status=RechargeAddressStatus.ASSIGNED,
+            assigned_at=datetime.utcnow(),
         )
-        token = token_result.scalar_one_or_none()
-        if not token:
-            raise ValueError(f"Token '{token_code}' not found")
-
-        created_addresses: list[RechargeAddress] = []
-
-        for _ in range(count):
-            # Generate wallet
-            address, private_key = generate_wallet_for_chain(chain.code)
-            encrypted_key = self.cipher.encrypt(private_key)
-
-            # Create wallet record
-            wallet = Wallet(
-                chain_id=chain.id,
-                token_id=token.id,
-                address=address,
-                encrypted_private_key=encrypted_key,
-                wallet_type=WalletType.RECHARGE,  # New wallet type
-                is_active=True,
-                label=f"Recharge Pool - {chain.code.upper()}",
-            )
-            self.db.add(wallet)
-            await self.db.flush()  # Get wallet.id
-
-            # Create recharge address record
-            recharge_address = RechargeAddress(
-                wallet_id=wallet.id,
-                chain_id=chain.id,
-                token_id=token.id,
-                status=RechargeAddressStatus.AVAILABLE,
-            )
-            self.db.add(recharge_address)
-            created_addresses.append(recharge_address)
-
+        self.db.add(recharge_address)
         await self.db.commit()
-        return created_addresses
+        await self.db.refresh(recharge_address)
 
-    async def get_pool_stats(
-        self,
-        chain_code: str = "tron",
-        token_code: str = "USDT",
-    ) -> dict[str, Any]:
-        """Get address pool statistics.
+        return recharge_address
 
-        Args:
-            chain_code: Blockchain network
-            token_code: Token code
-
-        Returns:
-            Pool statistics including counts by status
-        """
-        # Get chain and token IDs
-        chain_result = await self.db.execute(
-            select(Chain).where(func.lower(Chain.code) == chain_code.lower())
-        )
-        chain = chain_result.scalar_one_or_none()
-
-        token_result = await self.db.execute(
-            select(Token).where(func.upper(Token.code) == token_code.upper())
-        )
-        token = token_result.scalar_one_or_none()
-
-        if not chain or not token:
-            return {"total": 0, "available": 0, "assigned": 0, "locked": 0, "disabled": 0}
-
-        # Count by status
-        query = (
-            select(RechargeAddress.status, func.count(RechargeAddress.id))
-            .where(
-                RechargeAddress.chain_id == chain.id,
-                RechargeAddress.token_id == token.id,
-            )
-            .group_by(RechargeAddress.status)
-        )
-
-        result = await self.db.execute(query)
-        counts = {row[0].value: row[1] for row in result.all()}
-
-        return {
-            "chain": chain_code,
-            "token": token_code,
-            "total": sum(counts.values()),
-            "available": counts.get("available", 0),
-            "assigned": counts.get("assigned", 0),
-            "locked": counts.get("locked", 0),
-            "disabled": counts.get("disabled", 0),
-        }
-
-    async def get_or_assign_address(
+    async def get_or_create_address(
         self,
         user: User,
         chain_code: str = "tron",
         token_code: str = "USDT",
     ) -> RechargeAddress | None:
-        """Get merchant's existing recharge address or assign a new one from pool.
+        """Get merchant's existing recharge address or create a new one.
 
         Args:
-            user: Merchant user to assign address to
+            user: Merchant user
             chain_code: Blockchain network
             token_code: Token code
 
         Returns:
-            RechargeAddress or None if pool is empty
+            RechargeAddress or None if chain/token not found
         """
         # Get chain and token
         chain_result = await self.db.execute(
@@ -224,41 +154,8 @@ class RechargeService:
         if existing:
             return existing
 
-        # Assign a new address from pool (use FOR UPDATE to prevent race conditions)
-        available_query = (
-            select(RechargeAddress)
-            .where(
-                RechargeAddress.chain_id == chain.id,
-                RechargeAddress.token_id == token.id,
-                RechargeAddress.status == RechargeAddressStatus.AVAILABLE,
-            )
-            .limit(1)
-            .with_for_update()
-        )
-
-        available_result = await self.db.execute(available_query)
-        available = available_result.scalar_one_or_none()
-
-        if not available:
-            # Pool is empty, auto-generate a new address
-            new_addresses = await self.generate_address_pool(
-                count=1,
-                chain_code=chain_code,
-                token_code=token_code,
-            )
-            if not new_addresses:
-                return None  # Failed to generate
-            available = new_addresses[0]
-
-        # Assign to merchant
-        available.user_id = user.id
-        available.status = RechargeAddressStatus.ASSIGNED
-        available.assigned_at = datetime.utcnow()
-        available.updated_at = datetime.utcnow()
-
-        await self.db.commit()
-        await self.db.refresh(available)
-        return available
+        # Generate a new address for this merchant
+        return await self._generate_recharge_address(user, chain, token)
 
     async def get_recharge_address_details(
         self,
@@ -276,8 +173,8 @@ class RechargeService:
         Returns:
             Dict with address details including chain/token info, or None if unavailable
         """
-        # Get or assign address
-        recharge_address = await self.get_or_assign_address(user, chain_code, token_code)
+        # Get or create address
+        recharge_address = await self.get_or_create_address(user, chain_code, token_code)
         if not recharge_address:
             return None
 
@@ -333,10 +230,10 @@ class RechargeService:
         if amount <= 0:
             raise ValueError("Amount must be positive")
 
-        # Get or assign recharge address
-        recharge_address = await self.get_or_assign_address(user, chain_code, token_code)
+        # Get or create recharge address
+        recharge_address = await self.get_or_create_address(user, chain_code, token_code)
         if not recharge_address:
-            raise ValueError("No recharge addresses available. Please contact support.")
+            raise ValueError("Failed to create recharge address. Please contact support.")
 
         # Calculate expiry
         expiry_mins = expiry_minutes or self.settings.deposit_expiry_minutes

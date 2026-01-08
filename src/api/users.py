@@ -10,13 +10,17 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.api.deps import SuperAdmin
+from src.api.deps import CurrentUser, SuperAdmin
 from src.db import get_db
 from src.models.user import User, UserRole
 from src.schemas.user import (
+    AddSupportUserRequest,
     PaginatedResponse,
     ResetGoogleSecretResponse,
     ResetKeyResponse,
+    SearchUserResponse,
+    SupportUserResponse,
+    UpdateSupportPermissionsRequest,
     UpdateUserBalanceRequest,
     UpdateUserCreditLimitRequest,
     UpdateUserFeeConfigRequest,
@@ -217,3 +221,129 @@ async def reset_google_secret(
     if not result:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     return ResetGoogleSecretResponse(secret=result["secret"], qr_uri=result["qr_uri"])
+
+
+# ============ Support User Management (商户管理客服) ============
+
+
+@router.get("/support/list", response_model=list[SupportUserResponse])
+async def list_support_users(
+    service: Annotated[UserService, Depends(get_user_service)],
+    current_user: CurrentUser,
+) -> list[SupportUserResponse]:
+    """List all support users for the current merchant.
+
+    Only merchants can manage support users.
+    """
+    if current_user.role != UserRole.MERCHANT:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only merchants can manage support users",
+        )
+
+    users = await service.list_support_users(current_user)
+    return [SupportUserResponse.model_validate(u) for u in users]
+
+
+@router.get("/support/search", response_model=list[SearchUserResponse])
+async def search_users_for_support(
+    service: Annotated[UserService, Depends(get_user_service)],
+    current_user: CurrentUser,
+    email: str = Query(description="Email to search for"),
+) -> list[SearchUserResponse]:
+    """Search for users that can be added as support.
+
+    Only guest users can be added as support.
+    """
+    if current_user.role != UserRole.MERCHANT:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only merchants can manage support users",
+        )
+
+    users = await service.search_users_for_support(email, current_user)
+    return [SearchUserResponse.model_validate(u) for u in users]
+
+
+@router.post("/support", response_model=SupportUserResponse)
+async def add_support_user(
+    request: AddSupportUserRequest,
+    service: Annotated[UserService, Depends(get_user_service)],
+    current_user: CurrentUser,
+) -> SupportUserResponse:
+    """Add a user as support for the current merchant.
+
+    The target user must be a guest user (not already merchant/support/admin).
+    """
+    if current_user.role != UserRole.MERCHANT:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only merchants can manage support users",
+        )
+
+    try:
+        user = await service.add_support_user(
+            merchant=current_user,
+            user_id=request.user_id,
+            permissions=request.permissions,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+    return SupportUserResponse.model_validate(user)
+
+
+@router.patch("/support/{support_id}/permissions", response_model=SupportUserResponse)
+async def update_support_permissions(
+    support_id: int,
+    request: UpdateSupportPermissionsRequest,
+    service: Annotated[UserService, Depends(get_user_service)],
+    current_user: CurrentUser,
+) -> SupportUserResponse:
+    """Update support user permissions."""
+    if current_user.role != UserRole.MERCHANT:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only merchants can manage support users",
+        )
+
+    try:
+        user = await service.update_support_permissions(
+            merchant=current_user,
+            support_id=support_id,
+            permissions=request.permissions,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+    return SupportUserResponse.model_validate(user)
+
+
+@router.delete("/support/{support_id}")
+async def remove_support_user(
+    support_id: int,
+    service: Annotated[UserService, Depends(get_user_service)],
+    current_user: CurrentUser,
+) -> dict:
+    """Remove a support user (reverts to guest).
+
+    This doesn't delete the user, just removes the support relationship.
+    """
+    if current_user.role != UserRole.MERCHANT:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only merchants can manage support users",
+        )
+
+    try:
+        removed = await service.remove_support_user(
+            merchant=current_user,
+            support_id=support_id,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+    if not removed:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Support user not found")
+
+    return {"message": "Support user removed successfully"}

@@ -7,6 +7,7 @@ from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
+from src.core.exceptions import InsufficientBalanceError
 from src.models.ledger import (
     BalanceChangeType,
     BalanceLedger,
@@ -23,6 +24,156 @@ class LedgerService:
 
     def __init__(self, db: AsyncSession):
         self.db = db
+
+    # =========================================================================
+    # Fee Management (手续费管理) - 订单流程中使用
+    # =========================================================================
+
+    async def freeze_fee(
+        self,
+        user: User,
+        amount: Decimal,
+        order_id: int,
+        remark: str | None = None,
+    ) -> BalanceLedger:
+        """冻结手续费 - 订单创建时调用。
+
+        从可用余额中冻结指定金额作为手续费预扣。
+        可用余额 = balance - frozen_balance + credit_limit
+
+        Args:
+            user: 用户对象 (需要已刷新)
+            amount: 冻结金额 (正数)
+            order_id: 关联订单 ID
+            remark: 备注
+
+        Returns:
+            BalanceLedger: 账变记录
+
+        Raises:
+            InsufficientBalanceError: 余额不足（含赊账额度）
+        """
+        # 检查可用余额是否足够（含赊账额度）
+        available = user.balance - user.frozen_balance + user.credit_limit
+        if available < amount:
+            raise InsufficientBalanceError(
+                required=amount,
+                available=available,
+                message="积分余额不足，无法创建订单",
+            )
+
+        # 记录变更前状态
+        pre_balance = user.balance
+        pre_frozen = user.frozen_balance
+
+        # 冻结：可用余额不变，冻结余额增加
+        user.frozen_balance = user.frozen_balance + amount
+
+        # 创建账变记录
+        ledger = BalanceLedger(
+            user_id=user.id,
+            order_id=order_id,
+            change_type=BalanceChangeType.FEE_FREEZE,
+            amount=Decimal("0"),  # 总余额不变
+            pre_balance=pre_balance,
+            post_balance=user.balance,
+            frozen_amount=amount,
+            pre_frozen=pre_frozen,
+            post_frozen=user.frozen_balance,
+            remark=remark or f"订单手续费冻结 - 订单ID: {order_id}",
+        )
+
+        self.db.add(ledger)
+        return ledger
+
+    async def settle_fee(
+        self,
+        user: User,
+        amount: Decimal,
+        order_id: int,
+        remark: str | None = None,
+    ) -> BalanceLedger:
+        """结算手续费 - 订单成功时调用。
+
+        从冻结余额中扣除手续费。
+
+        Args:
+            user: 用户对象 (需要已刷新)
+            amount: 结算金额 (正数)
+            order_id: 关联订单 ID
+            remark: 备注
+
+        Returns:
+            BalanceLedger: 账变记录
+        """
+        # 记录变更前状态
+        pre_balance = user.balance
+        pre_frozen = user.frozen_balance
+
+        # 结算：总余额减少，冻结余额减少
+        user.balance = user.balance - amount
+        user.frozen_balance = user.frozen_balance - amount
+
+        # 创建账变记录
+        ledger = BalanceLedger(
+            user_id=user.id,
+            order_id=order_id,
+            change_type=BalanceChangeType.FEE_SETTLE,
+            amount=-amount,  # 总余额减少
+            pre_balance=pre_balance,
+            post_balance=user.balance,
+            frozen_amount=-amount,  # 冻结余额减少
+            pre_frozen=pre_frozen,
+            post_frozen=user.frozen_balance,
+            remark=remark or f"订单手续费结算 - 订单ID: {order_id}",
+        )
+
+        self.db.add(ledger)
+        return ledger
+
+    async def unfreeze_fee(
+        self,
+        user: User,
+        amount: Decimal,
+        order_id: int,
+        remark: str | None = None,
+    ) -> BalanceLedger:
+        """解冻手续费 - 订单失败/取消时调用。
+
+        退回冻结的手续费到可用余额。
+
+        Args:
+            user: 用户对象 (需要已刷新)
+            amount: 解冻金额 (正数)
+            order_id: 关联订单 ID
+            remark: 备注
+
+        Returns:
+            BalanceLedger: 账变记录
+        """
+        # 记录变更前状态
+        pre_balance = user.balance
+        pre_frozen = user.frozen_balance
+
+        # 解冻：总余额不变，冻结余额减少
+        user.frozen_balance = user.frozen_balance - amount
+
+        # 创建账变记录
+        ledger = BalanceLedger(
+            user_id=user.id,
+            order_id=order_id,
+            change_type=BalanceChangeType.FEE_UNFREEZE,
+            amount=Decimal("0"),  # 总余额不变
+            pre_balance=pre_balance,
+            post_balance=user.balance,
+            frozen_amount=-amount,  # 冻结余额减少
+            pre_frozen=pre_frozen,
+            post_frozen=user.frozen_balance,
+            remark=remark or f"订单手续费解冻 - 订单ID: {order_id}",
+        )
+
+        self.db.add(ledger)
+        return ledger
 
     # =========================================================================
     # Balance Ledger (积分明细)
@@ -81,6 +232,7 @@ class LedgerService:
                 BalanceLedger,
                 Order.order_no,
                 User.email.label("user_email"),
+                User.username.label("user_username"),
             )
             .outerjoin(Order, BalanceLedger.order_id == Order.id)
             .outerjoin(User, BalanceLedger.user_id == User.id)
@@ -134,6 +286,7 @@ class LedgerService:
                 "created_at": record.created_at,
                 "order_no": row[1],
                 "user_email": row[2],
+                "user_username": row[3],
             }
             items.append(item)
 
@@ -144,6 +297,7 @@ class LedgerService:
         operator: User,
         user_id: int,
         amount: Decimal,
+        change_type: BalanceChangeType,
         remark: str,
     ) -> BalanceLedger:
         """Manually adjust user balance (admin only).
@@ -152,6 +306,7 @@ class LedgerService:
             operator: Admin user performing the operation
             user_id: Target user ID
             amount: Amount to add (positive) or deduct (negative)
+            change_type: Type of balance change (manual_recharge, manual_deduct, adjustment, refund)
             remark: Reason for adjustment
 
         Returns:
@@ -166,23 +321,24 @@ class LedgerService:
             raise ValueError(f"User {user_id} not found")
 
         # Check if deduction is possible
+        # 可用余额 = balance - frozen_balance + credit_limit
         pre_balance = target_user.balance
         post_balance = pre_balance + amount
 
-        if amount < 0 and post_balance < -target_user.credit_limit:
-            raise ValueError(
-                f"Insufficient balance. Current: {pre_balance}, "
-                f"Credit limit: {target_user.credit_limit}"
-            )
+        if amount < 0:
+            # 扣款时检查：扣款后可用余额不能为负
+            post_available = post_balance - target_user.frozen_balance + target_user.credit_limit
+            if post_available < 0:
+                current_available = (
+                    pre_balance - target_user.frozen_balance + target_user.credit_limit
+                )
+                raise ValueError(
+                    f"可用余额不足。当前可用: {current_available}, 需要扣除: {abs(amount)}"
+                )
 
         # Update user balance
         target_user.balance = post_balance
         self.db.add(target_user)
-
-        # Determine change type
-        change_type = (
-            BalanceChangeType.MANUAL_RECHARGE if amount > 0 else BalanceChangeType.MANUAL_DEDUCT
-        )
 
         # Create ledger entry
         ledger = await self.create_balance_ledger(

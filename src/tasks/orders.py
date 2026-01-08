@@ -6,6 +6,7 @@ This module contains Celery tasks for order lifecycle management:
 
 import asyncio
 import logging
+import time
 
 from src.db.engine import close_db, get_session
 from src.models.order import Order, OrderStatus
@@ -45,18 +46,23 @@ async def _expire_order_async(order_id: int) -> dict:
     """Async implementation of expire_order."""
     from src.tasks.callback import send_callback
 
+    start_time = time.time()
+    logger.info(f"[expire_order] 收到超时关闭任务 order_id={order_id}")
+
     try:
         async with get_session() as db:
             service = PaymentService(db)
 
             order = await db.get(Order, order_id)
             if not order:
-                logger.warning(f"Order {order_id} not found for expiration")
+                logger.warning(f"[expire_order] 订单不存在 order_id={order_id}")
                 return {"success": False, "message": "Order not found"}
 
             # Only expire if still pending
             if order.status != OrderStatus.PENDING:
-                logger.info(f"Order {order.order_no} not expired - status is {order.status}")
+                logger.info(
+                    f"[expire_order] 订单已处理 order_no={order.order_no} status={order.status}"
+                )
                 return {
                     "success": True,
                     "message": f"Order already in {order.status} status",
@@ -64,7 +70,9 @@ async def _expire_order_async(order_id: int) -> dict:
 
             # Mark as expired
             await service.update_order_status(order, OrderStatus.EXPIRED)
-            logger.info(f"Order {order.order_no} marked as expired")
+
+            elapsed = time.time() - start_time
+            logger.info(f"[expire_order] 订单已关闭 order_no={order.order_no} 耗时={elapsed:.3f}s")
 
             # Send callback for expired order
             send_callback.delay(order.id)
@@ -72,7 +80,10 @@ async def _expire_order_async(order_id: int) -> dict:
             return {"success": True, "order_no": order.order_no}
 
     except Exception as e:
-        logger.exception(f"Expire order error for {order_id}: {e}")
+        elapsed = time.time() - start_time
+        logger.exception(
+            f"[expire_order] 关闭失败 order_id={order_id} 耗时={elapsed:.3f}s error={e}"
+        )
         return {"success": False, "error": str(e)}
     finally:
         await close_db()

@@ -1,8 +1,8 @@
 """init
 
-Revision ID: 093cc7a50c77
+Revision ID: b8da3360706c
 Revises:
-Create Date: 2026-01-07 02:32:52.400600
+Create Date: 2026-01-08 22:54:38.144916
 
 """
 
@@ -16,7 +16,7 @@ import sqlmodel
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = "093cc7a50c77"
+revision: str = "b8da3360706c"
 down_revision: str | Sequence[str] | None = None
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
@@ -139,14 +139,17 @@ def upgrade() -> None:
         sa.Column("id", sa.Integer(), nullable=False),
         sa.Column("clerk_id", sqlmodel.sql.sqltypes.AutoString(length=255), nullable=False),
         sa.Column("email", sqlmodel.sql.sqltypes.AutoString(length=255), nullable=False),
+        sa.Column("username", sqlmodel.sql.sqltypes.AutoString(length=255), nullable=True),
+        sa.Column("nickname", sqlmodel.sql.sqltypes.AutoString(length=255), nullable=True),
         sa.Column(
-            "role",
-            sa.Enum("SUPER_ADMIN", "MERCHANT", "SUPPORT", "GUEST", name="userrole"),
-            nullable=False,
+            "role", sa.Enum("SUPER_ADMIN", "MERCHANT", "SUPPORT", name="userrole"), nullable=False
         ),
         sa.Column("google_secret", sqlmodel.sql.sqltypes.AutoString(length=512), nullable=True),
         sa.Column("is_active", sa.Boolean(), nullable=False),
+        sa.Column("parent_id", sa.Integer(), nullable=True),
+        sa.Column("permissions", sa.JSON(), nullable=False),
         sa.Column("balance", sa.DECIMAL(precision=32, scale=8), nullable=False),
+        sa.Column("frozen_balance", sa.DECIMAL(precision=32, scale=8), nullable=False),
         sa.Column("credit_limit", sa.DECIMAL(precision=32, scale=8), nullable=False),
         sa.Column("deposit_key", sqlmodel.sql.sqltypes.AutoString(length=64), nullable=True),
         sa.Column("withdraw_key", sqlmodel.sql.sqltypes.AutoString(length=64), nullable=True),
@@ -157,11 +160,16 @@ def upgrade() -> None:
             ["fee_config_id"],
             ["fee_configs.id"],
         ),
+        sa.ForeignKeyConstraint(
+            ["parent_id"],
+            ["users.id"],
+        ),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(op.f("ix_users_clerk_id"), "users", ["clerk_id"], unique=True)
     op.create_index(op.f("ix_users_deposit_key"), "users", ["deposit_key"], unique=False)
     op.create_index(op.f("ix_users_email"), "users", ["email"], unique=False)
+    op.create_index(op.f("ix_users_parent_id"), "users", ["parent_id"], unique=False)
     op.create_index(op.f("ix_users_withdraw_key"), "users", ["withdraw_key"], unique=False)
     op.create_table(
         "webhook_provider_chains",
@@ -270,6 +278,7 @@ def upgrade() -> None:
         sa.Column("is_active", sa.Boolean(), nullable=False),
         sa.Column("label", sqlmodel.sql.sqltypes.AutoString(length=255), nullable=True),
         sa.Column("balance", sqlmodel.sql.sqltypes.AutoString(length=50), nullable=False),
+        sa.Column("last_used_at", sa.DateTime(), nullable=True),
         sa.Column("created_at", sa.DateTime(), nullable=False),
         sa.Column("updated_at", sa.DateTime(), nullable=False),
         sa.ForeignKeyConstraint(
@@ -288,6 +297,7 @@ def upgrade() -> None:
     )
     op.create_index(op.f("ix_wallets_address"), "wallets", ["address"], unique=True)
     op.create_index(op.f("ix_wallets_chain_id"), "wallets", ["chain_id"], unique=False)
+    op.create_index(op.f("ix_wallets_last_used_at"), "wallets", ["last_used_at"], unique=False)
     op.create_index(op.f("ix_wallets_token_id"), "wallets", ["token_id"], unique=False)
     op.create_index(op.f("ix_wallets_user_id"), "wallets", ["user_id"], unique=False)
     op.create_table(
@@ -609,6 +619,7 @@ def downgrade() -> None:
     op.drop_table("balance_ledgers")
     op.drop_index(op.f("ix_wallets_user_id"), table_name="wallets")
     op.drop_index(op.f("ix_wallets_token_id"), table_name="wallets")
+    op.drop_index(op.f("ix_wallets_last_used_at"), table_name="wallets")
     op.drop_index(op.f("ix_wallets_chain_id"), table_name="wallets")
     op.drop_index(op.f("ix_wallets_address"), table_name="wallets")
     op.drop_table("wallets")
@@ -626,6 +637,7 @@ def downgrade() -> None:
     op.drop_index(op.f("ix_webhook_provider_chains_chain_id"), table_name="webhook_provider_chains")
     op.drop_table("webhook_provider_chains")
     op.drop_index(op.f("ix_users_withdraw_key"), table_name="users")
+    op.drop_index(op.f("ix_users_parent_id"), table_name="users")
     op.drop_index(op.f("ix_users_email"), table_name="users")
     op.drop_index(op.f("ix_users_deposit_key"), table_name="users")
     op.drop_index(op.f("ix_users_clerk_id"), table_name="users")

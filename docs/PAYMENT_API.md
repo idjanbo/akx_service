@@ -8,13 +8,17 @@ AKX 支付网关提供加密货币充值和提现服务，支持多链、多币�
 
 | 币种 (token) | 支持链 (chain) |
 |-------------|----------------|
-| `USDT` | `tron`, `ethereum`, `solana` |
-| `USDC` | `tron`, `ethereum`, `solana` |
-| `ETH` | `ethereum` |
-| `TRX` | `tron` |
-| `SOL` | `solana` |
+| `USDT` | `TRON`, `ETH`, `BSC`, `SOL`, `TON` |
+| `USDC` | `TRON`, `ETH`, `BSC`, `SOL`, `TON` |
+| `TRX` | `TRON` |
+| `ETH` | `ETH` |
+| `SOL` | `SOL` |
+| `BNB` | `BSC` |
+| `TON` | `TON` |
 
-**重要**：支付方式由 **币种 + 链** 唯一确定。例如 TRON 链上的 USDT 和 Ethereum 链上的 USDT 是不同的支付方式。
+> **参数格式说明**：`token` 和 `chain` 参数**大小写不敏感**，系统会自动转换为大写匹配。推荐使用大写格式。
+
+**重要**：支付方式由 **币种 + 链** 唯一确定。例如 TRON 链上的 USDT 和 ETH 链上的 USDT 是不同的支付方式。
 
 ## 接入准备
 
@@ -121,8 +125,8 @@ public class SignUtil {
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
 | `out_trade_no` | string | 是 | 外部交易号（最长64字符，商户系统唯一订单号） |
-| `token` | string | 是 | 币种：`USDT` / `USDC` / `ETH` / `TRX` / `SOL` |
-| `chain` | string | 是 | 区块链网络：`tron` / `ethereum` / `solana` |
+| `token` | string | 是 | 币种：`USDT` / `USDC` / `TRX` / `ETH` / `SOL` / `BNB` / `TON` |
+| `chain` | string | 是 | 区块链网络：`TRON` / `ETH` / `BSC` / `SOL` / `TON` |
 | `amount` | string | 是 | 充值金额（最多8位小数） |
 | `callback_url` | string | 是 | 回调通知地址 |
 | `extra_data` | string | 否 | 附加数据（最长1024字符，回调时原样返回） |
@@ -184,8 +188,8 @@ merchant_no + timestamp + nonce + out_trade_no + token + chain + amount + callba
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
 | `out_trade_no` | string | 是 | 外部交易号（最长64字符，商户系统唯一订单号） |
-| `token` | string | 是 | 币种：`USDT` / `USDC` / `ETH` / `TRX` / `SOL` |
-| `chain` | string | 是 | 区块链网络：`tron` / `ethereum` / `solana` |
+| `token` | string | 是 | 币种：`USDT` / `USDC` / `TRX` / `ETH` / `SOL` / `BNB` / `TON` |
+| `chain` | string | 是 | 区块链网络：`TRON` / `ETH` / `BSC` / `SOL` / `TON` |
 | `amount` | string | 是 | 提现金额（最多8位小数） |
 | `to_address` | string | 是 | 收款钱包地址 |
 | `callback_url` | string | 是 | 回调通知地址 |

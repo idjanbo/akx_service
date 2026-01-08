@@ -58,6 +58,7 @@ class UserResponse(BaseModel):
 
     # Merchant fields (visible when role is merchant)
     balance: DecimalStr
+    frozen_balance: DecimalStr
     credit_limit: DecimalStr
     deposit_key: str | None = None
     withdraw_key: str | None = None

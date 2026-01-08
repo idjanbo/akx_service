@@ -82,14 +82,8 @@ class OrderService:
         result = await self.db.execute(query)
         orders = result.scalars().all()
 
-        # Convert to response format with merchant name
-        order_list = []
-        for order in orders:
-            order_dict = self._order_to_dict(order)
-            # Get merchant email (User model uses email, not username)
-            if order.merchant:
-                order_dict["merchant_name"] = order.merchant.email
-            order_list.append(order_dict)
+        # Convert to response format
+        order_list = [self._order_to_dict(order) for order in orders]
 
         return order_list, total
 
@@ -111,10 +105,7 @@ class OrderService:
         if user.role == UserRole.MERCHANT and order.merchant_id != user.id:
             return None
 
-        order_dict = self._order_to_dict(order)
-        if order.merchant:
-            order_dict["merchant_name"] = order.merchant.email
-        return order_dict
+        return self._order_to_dict(order)
 
     async def get_order_by_no(self, user: User, order_no: str) -> dict[str, Any] | None:
         """Get single order by order number.
@@ -137,10 +128,7 @@ class OrderService:
         if user.role == UserRole.MERCHANT and order.merchant_id != user.id:
             return None
 
-        order_dict = self._order_to_dict(order)
-        if order.merchant:
-            order_dict["merchant_name"] = order.merchant.email
-        return order_dict
+        return self._order_to_dict(order)
 
     async def retry_callback(self, user: User, order_id: int) -> dict[str, Any]:
         """Retry sending callback for an order.
@@ -255,9 +243,9 @@ class OrderService:
             "out_trade_no": order.out_trade_no,
             "order_type": order.order_type.value,
             "merchant_id": order.merchant_id,
-            "merchant_name": None,
             "token": order.token,
             "chain": order.chain,
+            "requested_amount": str(order.requested_amount) if order.requested_amount else None,
             "amount": str(order.amount),
             "fee": str(order.fee),
             "net_amount": str(order.net_amount),

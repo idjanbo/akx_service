@@ -2,6 +2,7 @@
 
 from datetime import datetime
 from decimal import Decimal
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -36,6 +37,7 @@ class BalanceLedgerResponse(BaseModel):
     # Joined fields
     order_no: str | None = None
     user_email: str | None = None
+    user_username: str | None = None
     operator_email: str | None = None
 
     class Config:
@@ -67,5 +69,8 @@ class ManualBalanceAdjustRequest(BaseModel):
     """Request to manually adjust user balance."""
 
     user_id: int
+    change_type: Literal["manual_recharge", "manual_deduct", "adjustment", "refund"] = Field(
+        description="账变类型：manual_recharge=人工充值, manual_deduct=人工扣款, adjustment=调账, refund=退款"
+    )
     amount: Decimal = Field(description="Amount to add (positive) or deduct (negative)")
     remark: str = Field(min_length=1, max_length=500, description="Reason for adjustment")

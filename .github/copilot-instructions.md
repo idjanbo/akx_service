@@ -413,11 +413,11 @@ from src.db.engine import get_db_for_script  # 不存在！
 ### Utils (工具函数)
 - `src/utils/crypto.py` - 加密工具 (钱包生成、地址验证)
 - `src/utils/pagination.py` - 分页工具 (PaginationParams、paginate_query)
-- `src/utils/totp.py` - TOTP 工具 (verify_totp、generate_totp_secret、get_totp_uri)
+- `src/utils/totp.py` - TOTP 工具 (totp_required 装饰器、require_totp_code、verify_totp_code)
 - `src/utils/helpers.py` - 通用辅助函数
 
 ### API Routes
-- `src/api/deps.py` - 公共依赖类型别名 (CurrentUser, SuperAdmin, TOTPUser 等)
+- `src/api/deps.py` - 公共依赖类型别名 (CurrentUser, SuperAdmin, TOTPUser) + `@totp_required` 装饰器
 - `src/api/auth.py` - Clerk JWT verification + user sync
 - `src/api/orders.py` - 订单 API 端点 (充值/提现订单、强制补单、重发回调)
 - `src/api/wallets.py` - 钱包 API 端点

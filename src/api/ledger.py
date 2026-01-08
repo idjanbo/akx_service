@@ -80,6 +80,7 @@ async def manual_balance_adjust(
             operator=admin,
             user_id=data.user_id,
             amount=data.amount,
+            change_type=data.change_type,
             remark=data.remark,
         )
         return BalanceLedgerResponse(

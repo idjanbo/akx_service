@@ -5,7 +5,7 @@ import hmac
 import time
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
@@ -24,6 +24,9 @@ from src.models.user import User, UserRole
 from src.models.wallet import Wallet, WalletType
 from src.schemas.payment import PaymentErrorCode
 
+if TYPE_CHECKING:
+    from src.services.ledger_service import LedgerService
+
 
 class PaymentError(Exception):
     """Custom payment error with error code."""
@@ -37,14 +40,24 @@ class PaymentError(Exception):
 class PaymentService:
     """Service for payment-related business logic."""
 
-    def __init__(self, db: AsyncSession):
+    def __init__(self, db: AsyncSession, ledger_service: "LedgerService | None" = None):
         self.db = db
+        self._ledger_service = ledger_service
         # Load settings for configurable values
         from src.core.config import get_settings
 
         settings = get_settings()
-        self.deposit_expiry_minutes = settings.deposit_expiry_minutes
+        self.deposit_expiry_seconds = settings.deposit_expiry_seconds
         self.timestamp_validity_ms = settings.timestamp_validity_minutes * 60 * 1000
+
+    @property
+    def ledger_service(self) -> "LedgerService":
+        """Get LedgerService instance (lazy initialization)."""
+        if self._ledger_service is None:
+            from src.services.ledger_service import LedgerService
+
+            self._ledger_service = LedgerService(self.db)
+        return self._ledger_service
 
     # ============ Signature Verification ============
 
@@ -319,6 +332,7 @@ class PaymentService:
 
         Raises:
             PaymentError: On creation failure
+            InsufficientBalanceError: If insufficient credits for fee
         """
         # Check duplicate out_trade_no
         result = await self.db.execute(
@@ -351,8 +365,22 @@ class PaymentService:
                     f"Amount must be at least {min_amount}",
                 )
 
-        # Create order
-        expire_time = datetime.now(UTC) + timedelta(minutes=self.deposit_expiry_minutes)
+        # Calculate deposit fee
+        fee = await self._calculate_deposit_fee(merchant, amount, support)
+
+        # Generate unique payment amount to avoid collisions
+        from src.utils.amount import generate_unique_amount
+
+        try:
+            unique_amount = await generate_unique_amount(self.db, wallet.address, amount)
+        except ValueError as e:
+            raise PaymentError(
+                PaymentErrorCode.WALLET_NOT_AVAILABLE,
+                str(e),
+            ) from e
+
+        # Create order first to get order_id for ledger
+        expire_time = datetime.now(UTC) + timedelta(seconds=self.deposit_expiry_seconds)
         order = Order(
             order_no=generate_order_no(OrderType.DEPOSIT),
             out_trade_no=out_trade_no,
@@ -360,9 +388,10 @@ class PaymentService:
             merchant_id=merchant.id,
             token=token.code,
             chain=chain.code.lower(),
-            amount=amount,
-            fee=Decimal("0"),
-            net_amount=amount,
+            requested_amount=amount,  # 商户请求的原始金额
+            amount=unique_amount,  # 用户实际支付金额（含尾数）
+            fee=fee,
+            net_amount=unique_amount - fee,  # 用户实际到账 = 实付金额 - 手续费
             wallet_address=wallet.address,
             callback_url=callback_url,
             extra_data=extra_data,
@@ -371,6 +400,18 @@ class PaymentService:
         )
 
         self.db.add(order)
+        await self.db.flush()  # Get order.id without committing
+
+        # Freeze fee from merchant credits
+        # Raises InsufficientBalanceError if balance insufficient
+        await self.db.refresh(merchant)  # Refresh to get latest balance
+        await self.ledger_service.freeze_fee(
+            user=merchant,
+            amount=fee,
+            order_id=order.id,
+            remark=f"充值订单手续费冻结 - {order.order_no}",
+        )
+
         await self.db.commit()
         await self.db.refresh(order)
 
@@ -379,7 +420,8 @@ class PaymentService:
 
         expire_order.apply_async(
             args=[order.id],
-            countdown=self.deposit_expiry_minutes * 60,  # Convert to seconds
+            countdown=self.deposit_expiry_seconds,
+            queue="orders",  # Send to orders queue
         )
 
         return order
@@ -412,6 +454,7 @@ class PaymentService:
 
         Raises:
             PaymentError: On creation failure
+            InsufficientBalanceError: If insufficient credits for fee
         """
         # Check duplicate out_trade_no
         result = await self.db.execute(
@@ -446,20 +489,7 @@ class PaymentService:
         # Calculate fee
         fee = await self._calculate_withdraw_fee(merchant, amount, support)
 
-        # Check merchant balance (including credit limit)
-        total_required = amount + fee
-        available_balance = merchant.balance + merchant.credit_limit
-        if available_balance < total_required:
-            raise PaymentError(
-                PaymentErrorCode.INSUFFICIENT_BALANCE,
-                f"Insufficient balance. Required: {total_required}, Available: {available_balance}",
-            )
-
-        # Deduct from merchant balance
-        merchant.balance -= total_required
-        self.db.add(merchant)
-
-        # Create order
+        # Create order first to get order_id for ledger
         net_amount = amount  # User receives full amount, fee is separate
         order = Order(
             order_no=generate_order_no(OrderType.WITHDRAW),
@@ -468,6 +498,7 @@ class PaymentService:
             merchant_id=merchant.id,
             token=token.code,
             chain=chain.code.lower(),
+            requested_amount=amount,  # 提现无金额修改，原始金额=实际金额
             amount=amount,
             fee=fee,
             net_amount=net_amount,
@@ -478,6 +509,18 @@ class PaymentService:
         )
 
         self.db.add(order)
+        await self.db.flush()  # Get order.id without committing
+
+        # Freeze fee from merchant credits
+        # Raises InsufficientBalanceError if balance insufficient
+        await self.db.refresh(merchant)  # Refresh to get latest balance
+        await self.ledger_service.freeze_fee(
+            user=merchant,
+            amount=fee,
+            order_id=order.id,
+            remark=f"提现订单手续费冻结 - {order.order_no}",
+        )
+
         await self.db.commit()
         await self.db.refresh(order)
         return order
@@ -703,12 +746,14 @@ class PaymentService:
         chain_id: int,
         token_id: int | None,
     ) -> Wallet | None:
-        """Get an available deposit wallet for the merchant.
+        """Get an available deposit wallet using round-robin allocation.
 
-        TODO: Implement proper wallet allocation logic:
-        - Round-robin or least-recently-used selection
-        - Consider wallet status and pending orders
-        - Potentially lock wallet during order lifetime
+        Selection logic:
+        1. Wallets with NULL last_used_at are prioritized (never used)
+        2. Then sorted by last_used_at ascending (least recently used first)
+        3. On selection, update last_used_at to current time
+
+        This ensures each wallet is used in rotation before repeating.
 
         Args:
             merchant_id: Merchant ID
@@ -718,6 +763,15 @@ class PaymentService:
         Returns:
             Available wallet or None
         """
+        from sqlalchemy import case
+
+        # MySQL doesn't support NULLS FIRST, use CASE expression instead
+        # NULL values get 0 (sorted first), non-NULL get 1 (sorted after)
+        null_first_expr = case(
+            (Wallet.last_used_at.is_(None), 0),
+            else_=1,
+        )
+
         query = (
             select(Wallet)
             .where(
@@ -726,7 +780,11 @@ class PaymentService:
                 Wallet.is_active == True,  # noqa: E712
                 Wallet.wallet_type == WalletType.MERCHANT,
             )
-            .order_by(Wallet.created_at)
+            .order_by(
+                null_first_expr,  # NULL first (unused wallets)
+                Wallet.last_used_at,  # Then by last_used_at ascending
+                Wallet.created_at,  # Then by creation time
+            )
             .limit(1)
         )
 
@@ -735,7 +793,48 @@ class PaymentService:
             query = query.where(Wallet.token_id == token_id)
 
         result = await self.db.execute(query)
-        return result.scalar_one_or_none()
+        wallet = result.scalar_one_or_none()
+
+        # Update last_used_at for round-robin rotation
+        if wallet:
+            wallet.last_used_at = datetime.now(UTC)
+            self.db.add(wallet)
+            # Note: commit is handled by caller (create_deposit_order)
+
+        return wallet
+
+    async def _calculate_deposit_fee(
+        self,
+        merchant: User,
+        amount: Decimal,
+        support: TokenChainSupport | None,
+    ) -> Decimal:
+        """Calculate deposit fee.
+
+        Args:
+            merchant: Merchant user
+            amount: Deposit amount
+            support: Token-chain support config (not used for deposit fee currently)
+
+        Returns:
+            Fee amount
+        """
+        # Fall back to merchant's fee config
+        if merchant.fee_config_id:
+            fee_config = await self.db.get(FeeConfig, merchant.fee_config_id)
+            if fee_config:
+                return fee_config.calculate_deposit_fee(amount)
+
+        # Fall back to default fee config
+        result = await self.db.execute(
+            select(FeeConfig).where(FeeConfig.is_default == True)  # noqa: E712
+        )
+        default_config = result.scalar_one_or_none()
+        if default_config:
+            return default_config.calculate_deposit_fee(amount)
+
+        # No fee config found, return 0
+        return Decimal("0")
 
     async def _calculate_withdraw_fee(
         self,

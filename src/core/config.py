@@ -68,8 +68,8 @@ class Settings(BaseSettings):
     helius_webhook_secret: str = Field(default="", description="Helius webhook auth token")
 
     # Payment settings
-    deposit_expiry_minutes: int = Field(
-        default=30, description="Deposit order expiry time in minutes"
+    deposit_expiry_seconds: int = Field(
+        default=30, description="Deposit order expiry time in seconds"
     )
     timestamp_validity_minutes: int = Field(
         default=5, description="API request timestamp validity window in minutes"

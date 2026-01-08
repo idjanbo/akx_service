@@ -197,11 +197,15 @@ async def verify_totp(
 
     # Verify the code
     totp = pyotp.TOTP(decrypted)
-    is_valid = totp.verify(request.code, valid_window=1)
+    if not totp.verify(request.code, valid_window=1):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="验证码无效",
+        )
 
     return TOTPVerifyResponse(
-        valid=is_valid,
-        message="验证成功" if is_valid else "验证码无效",
+        valid=True,
+        message="验证成功",
     )
 
 
@@ -243,9 +247,9 @@ async def disable_totp(
     # Verify the code before disabling
     totp = pyotp.TOTP(decrypted)
     if not totp.verify(request.code, valid_window=1):
-        return TOTPVerifyResponse(
-            valid=False,
-            message="验证码无效，无法禁用 2FA",
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="验证码无效，无法禁用 2FA",
         )
 
     # Disable 2FA

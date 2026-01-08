@@ -4,12 +4,15 @@ from typing import Annotated
 
 from clerk_backend_api import AuthenticateRequestOptions, Clerk, authenticate_request
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from pydantic import BaseModel
+from pydantic import Field as PydanticField
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from src.core.config import get_settings
 from src.db import get_db
 from src.models.user import User, UserRole
+from src.utils.totp import totp_required
 
 
 class ClerkAuth:
@@ -202,11 +205,16 @@ router = APIRouter(prefix="/auth", tags=["Auth"])
 
 
 @router.get("/me")
-async def get_me(user: Annotated[User, Depends(get_current_user)]):
+async def get_me(
+    user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
     """Get current user profile with role information.
 
     Returns:
         Current user data including role for frontend RBAC
+        For merchants: includes merchant_no, deposit_key, withdraw_key
+        For support users: includes parent merchant's keys
     """
     # 检查 TOTP 是否已启用（有 google_secret 且不是 pending 状态）
     totp_enabled = False
@@ -224,13 +232,132 @@ async def get_me(user: Annotated[User, Depends(get_current_user)]):
         except Exception:
             totp_enabled = False
 
-    return {
+    # Base response
+    response = {
         "id": user.id,
         "clerk_id": user.clerk_id,
         "email": user.email,
+        "username": user.username,
+        "nickname": user.nickname,
         "role": user.role.value,
         "is_active": user.is_active,
         "totp_enabled": totp_enabled,
         "created_at": user.created_at.isoformat(),
         "updated_at": user.updated_at.isoformat(),
     }
+
+    # For merchants: include merchant keys and balance
+    if user.role == UserRole.MERCHANT:
+        response.update(
+            {
+                "balance": str(user.balance),
+                "frozen_balance": str(user.frozen_balance),
+                "credit_limit": str(user.credit_limit),
+                "merchant_no": f"M{user.id}",
+                "deposit_key": user.deposit_key,
+                "withdraw_key": user.withdraw_key,
+            }
+        )
+
+    # For support users: include parent merchant's info
+    if user.role == UserRole.SUPPORT and user.parent_id:
+        parent = await db.get(User, user.parent_id)
+        if parent:
+            response.update(
+                {
+                    "parent_id": parent.id,
+                    "permissions": user.permissions or [],
+                    # Include parent merchant's keys for support user reference
+                    "parent_merchant_no": f"M{parent.id}",
+                    "parent_deposit_key": parent.deposit_key,
+                    "parent_withdraw_key": parent.withdraw_key,
+                }
+            )
+
+    return response
+
+
+class ResetKeyRequest(BaseModel):
+    """Request model for resetting API keys (requires TOTP)."""
+
+    totp_code: str = PydanticField(..., min_length=6, max_length=6, description="TOTP 验证码")
+
+
+@router.post("/me/reset-deposit-key")
+@totp_required
+async def reset_my_deposit_key(
+    data: ResetKeyRequest,
+    user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Reset current user's deposit API key (merchant only, requires TOTP).
+
+    Returns:
+        New deposit key
+    """
+    if user.role != UserRole.MERCHANT:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only merchants can reset deposit keys",
+        )
+
+    import secrets
+
+    new_key = secrets.token_hex(32)
+    user.deposit_key = new_key
+    db.add(user)
+    await db.commit()
+
+    return {"key": new_key}
+
+
+@router.post("/me/reset-withdraw-key")
+@totp_required
+async def reset_my_withdraw_key(
+    data: ResetKeyRequest,
+    user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Reset current user's withdraw API key (merchant only, requires TOTP).
+
+    Returns:
+        New withdraw key
+    """
+    if user.role != UserRole.MERCHANT:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only merchants can reset withdraw keys",
+        )
+
+    import secrets
+
+    new_key = secrets.token_hex(32)
+    user.withdraw_key = new_key
+    db.add(user)
+    await db.commit()
+
+    return {"key": new_key}
+
+
+class UpdateNicknameRequest(BaseModel):
+    """Request model for updating nickname."""
+
+    nickname: str = PydanticField(..., min_length=1, max_length=50, description="用户昵称")
+
+
+@router.patch("/me/nickname")
+async def update_my_nickname(
+    request: UpdateNicknameRequest,
+    user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Update current user's nickname.
+
+    Returns:
+        Updated nickname
+    """
+    user.nickname = request.nickname.strip()
+    db.add(user)
+    await db.commit()
+
+    return {"nickname": user.nickname}

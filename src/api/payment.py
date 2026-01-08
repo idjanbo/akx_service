@@ -15,6 +15,7 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.core.exceptions import InsufficientBalanceError
 from src.db import get_db
 from src.models.order import OrderType
 from src.schemas.payment import (
@@ -140,6 +141,11 @@ async def create_deposit(
             else 400
         )
         return payment_error_response(e, status_code)
+    except InsufficientBalanceError as e:
+        return payment_error_response(
+            PaymentError(PaymentErrorCode.INSUFFICIENT_BALANCE, e.message),
+            400,
+        )
     except Exception as e:
         return payment_error_response(
             PaymentError(PaymentErrorCode.INTERNAL_ERROR, str(e)),
@@ -239,6 +245,11 @@ async def create_withdraw(
             else 400
         )
         return payment_error_response(e, status_code)
+    except InsufficientBalanceError as e:
+        return payment_error_response(
+            PaymentError(PaymentErrorCode.INSUFFICIENT_BALANCE, e.message),
+            400,
+        )
     except Exception as e:
         return payment_error_response(
             PaymentError(PaymentErrorCode.INTERNAL_ERROR, str(e)),

@@ -122,9 +122,13 @@ class Order(SQLModel, table=True):
     # Payment details
     token: str = Field(max_length=20, index=True, description="Token code (uppercase)")
     chain: str = Field(max_length=20, index=True, description="Chain code (lowercase)")
+    requested_amount: Decimal = Field(
+        sa_column=sa.Column(sa.DECIMAL(32, 8), nullable=False),
+        description="Merchant requested amount (original)",
+    )
     amount: Decimal = Field(
         sa_column=sa.Column(sa.DECIMAL(32, 8), nullable=False),
-        description="Order amount",
+        description="Actual payment amount (with unique suffix)",
     )
     fee: Decimal = Field(
         default=Decimal("0"),

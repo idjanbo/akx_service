@@ -166,6 +166,9 @@ class Wallet(SQLModel, table=True):
     # Cached balance (string to preserve precision)
     balance: str = Field(default="0", max_length=50)
 
+    # Round-robin allocation: track last used time for deposit wallet selection
+    last_used_at: datetime | None = Field(default=None, index=True)
+
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 

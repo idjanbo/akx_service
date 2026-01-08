@@ -73,6 +73,7 @@ class User(SQLModel, table=True):
     clerk_id: str = Field(max_length=255, unique=True, index=True)
     email: str = Field(max_length=255, index=True)
     username: str | None = Field(default=None, max_length=255)
+    nickname: str | None = Field(default=None, max_length=255)  # 用户昵称
     role: UserRole = Field(default=UserRole.MERCHANT)  # Default for invited users
     google_secret: str | None = Field(default=None, max_length=512)
     is_active: bool = Field(default=True)
@@ -86,6 +87,10 @@ class User(SQLModel, table=True):
 
     # Merchant-specific fields
     balance: Decimal = Field(
+        default=Decimal("0"),
+        sa_column=sa.Column(sa.DECIMAL(32, 8), nullable=False, default=Decimal("0")),
+    )
+    frozen_balance: Decimal = Field(
         default=Decimal("0"),
         sa_column=sa.Column(sa.DECIMAL(32, 8), nullable=False, default=Decimal("0")),
     )

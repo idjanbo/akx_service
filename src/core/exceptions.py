@@ -31,9 +31,23 @@ class ValidationError(AKXError):
 
 
 class InsufficientBalanceError(AKXError):
-    """Merchant has insufficient balance for withdrawal."""
+    """Merchant has insufficient balance for fee payment."""
 
-    pass
+    def __init__(
+        self,
+        required: "Decimal | None" = None,
+        available: "Decimal | None" = None,
+        message: str = "积分余额不足",
+    ) -> None:
+        details = {}
+        if required is not None:
+            details["required"] = str(required)
+        if available is not None:
+            details["available"] = str(available)
+        super().__init__(message, details)
+
+
+from decimal import Decimal  # noqa: E402 - 为避免循环导入放在下面
 
 
 class ChainError(AKXError):

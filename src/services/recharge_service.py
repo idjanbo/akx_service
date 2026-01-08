@@ -236,8 +236,10 @@ class RechargeService:
             raise ValueError("Failed to create recharge address. Please contact support.")
 
         # Calculate expiry
-        expiry_mins = expiry_minutes or self.settings.deposit_expiry_minutes
-        expires_at = datetime.utcnow() + timedelta(minutes=expiry_mins)
+        expiry_secs = (
+            expiry_minutes * 60 if expiry_minutes else self.settings.deposit_expiry_seconds
+        )
+        expires_at = datetime.utcnow() + timedelta(seconds=expiry_secs)
 
         # Create order
         order = RechargeOrder(

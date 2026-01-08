@@ -42,18 +42,6 @@ class CreateDepositRequest(PaymentBaseRequest):
     callback_url: str = Field(..., max_length=500, description="回调通知地址")
     extra_data: str | None = Field(None, max_length=1024, description="附加数据")
 
-    @field_validator("token")
-    @classmethod
-    def validate_token(cls, v: str) -> str:
-        """Token must be uppercase."""
-        return v.upper()
-
-    @field_validator("chain")
-    @classmethod
-    def validate_chain(cls, v: str) -> str:
-        """Chain must be lowercase."""
-        return v.lower()
-
     @field_validator("amount")
     @classmethod
     def validate_amount(cls, v: str) -> str:
@@ -99,18 +87,6 @@ class CreateWithdrawRequest(PaymentBaseRequest):
     to_address: str = Field(..., max_length=200, description="收款钱包地址")
     callback_url: str = Field(..., max_length=500, description="回调通知地址")
     extra_data: str | None = Field(None, max_length=1024, description="附加数据")
-
-    @field_validator("token")
-    @classmethod
-    def validate_token(cls, v: str) -> str:
-        """Token must be uppercase."""
-        return v.upper()
-
-    @field_validator("chain")
-    @classmethod
-    def validate_chain(cls, v: str) -> str:
-        """Chain must be lowercase."""
-        return v.lower()
 
     @field_validator("amount")
     @classmethod

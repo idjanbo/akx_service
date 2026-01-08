@@ -20,7 +20,6 @@ class UserRole(str, Enum):
     SUPER_ADMIN = "super_admin"
     MERCHANT = "merchant"
     SUPPORT = "support"
-    GUEST = "guest"
 
 
 class SupportPermission(str, Enum):
@@ -74,7 +73,7 @@ class User(SQLModel, table=True):
     clerk_id: str = Field(max_length=255, unique=True, index=True)
     email: str = Field(max_length=255, index=True)
     username: str | None = Field(default=None, max_length=255)
-    role: UserRole = Field(default=UserRole.GUEST)
+    role: UserRole = Field(default=UserRole.MERCHANT)  # Default for invited users
     google_secret: str | None = Field(default=None, max_length=512)
     is_active: bool = Field(default=True)
 
@@ -152,5 +151,4 @@ class User(SQLModel, table=True):
             )
             return perm_value in self.permissions
 
-        # Guest users have no permissions
         return False

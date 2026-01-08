@@ -180,3 +180,40 @@ class CurrentUserResponse(BaseModel):
     totp_enabled: bool
     created_at: str  # ISO format
     updated_at: str  # ISO format
+
+
+# ============ Invitation Schemas (邀请管理) ============
+
+
+class InviteMerchantRequest(BaseModel):
+    """Request to invite a new merchant."""
+
+    email: str = Field(description="Email address to send invitation to")
+
+
+class InviteSupportRequest(BaseModel):
+    """Request to invite a new support user."""
+
+    email: str = Field(description="Email address to send invitation to")
+    permissions: list[str] = Field(
+        default=[],
+        description="List of permission strings to grant",
+    )
+
+
+class InvitationResponse(BaseModel):
+    """Response for invitation."""
+
+    id: str
+    email: str
+    role: str | None = None
+    permissions: list[str] = []
+    status: str
+    created_at: int | None = None  # Unix timestamp from Clerk
+    expires_at: int | None = None  # Unix timestamp from Clerk
+
+
+class ResendInvitationRequest(BaseModel):
+    """Request to resend an invitation."""
+
+    invitation_id: str = Field(description="Clerk invitation ID")

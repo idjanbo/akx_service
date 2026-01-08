@@ -203,10 +203,6 @@ class OrderService:
         Returns:
             Result dict with success flag and message
         """
-        # Guest users cannot force complete
-        if user.role == UserRole.GUEST:
-            raise ValueError("Permission denied")
-
         order = await self.db.get(Order, order_id)
         if not order:
             raise ValueError("Order not found")

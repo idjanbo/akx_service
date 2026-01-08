@@ -36,6 +36,12 @@ class Settings(BaseSettings):
     clerk_secret_key: str = Field(..., description="Clerk secret key")
     clerk_publishable_key: str = Field(..., description="Clerk publishable key")
 
+    # Frontend URL (for invitation redirects)
+    frontend_url: str = Field(
+        default="http://localhost:3000",
+        description="Frontend application URL for redirects",
+    )
+
     # TRON (Primary Chain)
     tron_api_key: str = Field(default="", description="TronGrid API key")
     tron_network: Literal["mainnet", "shasta", "nile"] = Field(

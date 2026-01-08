@@ -129,18 +129,13 @@ async def get_current_user(
     user = result.scalar_one_or_none()
 
     if not user:
-        # Sync user from Clerk to local DB - fetch info from Clerk API
-        user_info = clerk.get_user_info(clerk_id)
-        user = User(
-            clerk_id=clerk_id,
-            email=user_info.get("email", ""),
-            username=user_info.get("username") or None,
-            role=UserRole.GUEST,  # Default role for new users
-            is_active=True,
+        # User not in local DB - this shouldn't happen in invitation-only mode
+        # The user should have been created via webhook when they registered
+        # For safety, we reject the request
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User not found. Please complete registration via invitation link.",
         )
-        db.add(user)
-        await db.commit()
-        await db.refresh(user)
     else:
         # Update email/username if changed (sync from Clerk)
         user_info = clerk.get_user_info(clerk_id)

@@ -573,3 +573,145 @@ def _get_native_token(chain_code: str) -> str:
         "TRON": "TRX",
     }
     return mapping.get(chain_code, "ETH")
+
+
+# ============ Clerk (User Events) ============
+
+
+@router.post("/clerk")
+async def clerk_webhook(
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    svix_id: str | None = Header(None, alias="svix-id"),
+    svix_timestamp: str | None = Header(None, alias="svix-timestamp"),
+    svix_signature: str | None = Header(None, alias="svix-signature"),
+):
+    """Handle incoming Clerk webhook events.
+
+    Primarily handles:
+    - user.created: Create local user record with role from invitation metadata
+    - user.deleted: Deactivate local user
+
+    The role is determined from the invitation's public_metadata which
+    is set when sending the invitation via our API.
+
+    TODO: Implement Svix signature verification for production.
+    """
+    import json
+
+    body = await request.body()
+
+    try:
+        payload = json.loads(body)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="Invalid JSON payload")
+
+    event_type = payload.get("type")
+    data = payload.get("data", {})
+
+    if event_type == "user.created":
+        await _handle_clerk_user_created(db, data)
+    elif event_type == "user.deleted":
+        await _handle_clerk_user_deleted(db, data)
+
+    return {"received": True}
+
+
+async def _handle_clerk_user_created(db: AsyncSession, data: dict) -> None:
+    """Handle user.created event from Clerk.
+
+    This is called when a user completes registration via an invitation link.
+    The role and other metadata are extracted from the invitation's public_metadata.
+    """
+    from datetime import UTC, datetime
+
+    from src.models.user import User, UserRole, generate_api_key
+
+    clerk_id = data.get("id")
+    if not clerk_id:
+        return
+
+    # Get email
+    email_addresses = data.get("email_addresses", [])
+    primary_email_id = data.get("primary_email_address_id")
+    email = ""
+    for addr in email_addresses:
+        if addr.get("id") == primary_email_id:
+            email = addr.get("email_address", "")
+            break
+    if not email and email_addresses:
+        email = email_addresses[0].get("email_address", "")
+
+    # Get username
+    username = data.get("username")
+
+    # Get role and metadata from public_metadata (set during invitation)
+    public_metadata = data.get("public_metadata", {})
+    role_str = public_metadata.get("role", "merchant")  # Default to merchant
+    parent_id = public_metadata.get("parent_id")
+    permissions = public_metadata.get("permissions", [])
+
+    # Convert role string to enum
+    try:
+        role = UserRole(role_str)
+    except ValueError:
+        role = UserRole.MERCHANT
+
+    # Check if user already exists
+    result = await db.execute(select(User).where(User.clerk_id == clerk_id))
+    existing = result.scalar_one_or_none()
+
+    if existing:
+        # User already exists, update if needed
+        existing.email = email
+        if username:
+            existing.username = username
+        existing.updated_at = datetime.now(UTC)
+        db.add(existing)
+        await db.commit()
+        return
+
+    # Create new user
+    new_user = User(
+        clerk_id=clerk_id,
+        email=email,
+        username=username,
+        role=role,
+        is_active=True,
+        parent_id=parent_id if role == UserRole.SUPPORT else None,
+        permissions=permissions if role == UserRole.SUPPORT else [],
+    )
+
+    # Generate API keys for merchants
+    if role == UserRole.MERCHANT:
+        new_user.deposit_key = generate_api_key()
+        new_user.withdraw_key = generate_api_key()
+
+    db.add(new_user)
+    await db.commit()
+    logger.info(f"Created user from Clerk webhook: {email} with role {role}")
+
+
+async def _handle_clerk_user_deleted(db: AsyncSession, data: dict) -> None:
+    """Handle user.deleted event from Clerk.
+
+    When a user is deleted from Clerk, we deactivate them locally
+    rather than deleting, to preserve audit trails.
+    """
+    from datetime import UTC, datetime
+
+    from src.models.user import User
+
+    clerk_id = data.get("id")
+    if not clerk_id:
+        return
+
+    result = await db.execute(select(User).where(User.clerk_id == clerk_id))
+    user = result.scalar_one_or_none()
+
+    if user:
+        user.is_active = False
+        user.updated_at = datetime.now(UTC)
+        db.add(user)
+        await db.commit()
+        logger.info(f"Deactivated user from Clerk webhook: {user.email}")

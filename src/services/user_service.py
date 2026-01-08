@@ -320,81 +320,6 @@ class UserService:
         )
         return list(result.scalars().all())
 
-    async def search_users_for_support(
-        self,
-        email: str,
-        merchant: User,
-    ) -> list[User]:
-        """Search for users that can be added as support.
-
-        Only guest users can be added as support.
-        Excludes users already belonging to this merchant.
-
-        Args:
-            email: Email to search for
-            merchant: The merchant user
-
-        Returns:
-            List of matching users
-        """
-        escaped = email.replace("%", r"\%").replace("_", r"\_")
-        result = await self.db.execute(
-            select(User)
-            .where(
-                User.email.ilike(f"%{escaped}%"),
-                User.role == UserRole.GUEST,  # Only guest can become support
-                User.parent_id.is_(None),  # Not already a support user
-            )
-            .limit(10)
-        )
-        return list(result.scalars().all())
-
-    async def add_support_user(
-        self,
-        merchant: User,
-        user_id: int,
-        permissions: list[str],
-    ) -> User:
-        """Add a user as support for a merchant.
-
-        Args:
-            merchant: The merchant user
-            user_id: User ID to add as support
-            permissions: List of permission strings
-
-        Returns:
-            Updated support user
-
-        Raises:
-            ValueError: If user not found, not guest, or already support
-        """
-        user = await self.db.get(User, user_id)
-        if not user:
-            raise ValueError("User not found")
-
-        if user.role != UserRole.GUEST:
-            raise ValueError("Only guest users can be added as support")
-
-        if user.parent_id is not None:
-            raise ValueError("User is already a support user")
-
-        # Validate permissions
-        valid_permissions = {p.value for p in SupportPermission}
-        for perm in permissions:
-            if perm not in valid_permissions:
-                raise ValueError(f"Invalid permission: {perm}")
-
-        # Update user to support role
-        user.role = UserRole.SUPPORT
-        user.parent_id = merchant.id
-        user.permissions = permissions
-        user.updated_at = datetime.now(UTC)
-
-        self.db.add(user)
-        await self.db.commit()
-        await self.db.refresh(user)
-        return user
-
     async def update_support_permissions(
         self,
         merchant: User,
@@ -438,12 +363,52 @@ class UserService:
         await self.db.refresh(user)
         return user
 
+    async def toggle_support_status(
+        self,
+        merchant: User,
+        support_id: int,
+        is_active: bool,
+    ) -> User:
+        """Toggle support user active status.
+
+        Args:
+            merchant: The merchant user
+            support_id: Support user ID
+            is_active: New active status
+
+        Returns:
+            Updated support user
+
+        Raises:
+            ValueError: If support user not found or doesn't belong to merchant
+        """
+        user = await self.db.get(User, support_id)
+        if not user:
+            raise ValueError("Support user not found")
+
+        if user.parent_id != merchant.id:
+            raise ValueError("Support user doesn't belong to this merchant")
+
+        if user.role != UserRole.SUPPORT:
+            raise ValueError("User is not a support user")
+
+        user.is_active = is_active
+        user.updated_at = datetime.now(UTC)
+
+        self.db.add(user)
+        await self.db.commit()
+        await self.db.refresh(user)
+        return user
+
     async def remove_support_user(
         self,
         merchant: User,
         support_id: int,
     ) -> bool:
-        """Remove a support user (reverts to guest).
+        """Remove a support user.
+
+        This removes the support relationship and deactivates the user.
+        The user can be re-invited later if needed.
 
         Args:
             merchant: The merchant user
@@ -465,8 +430,8 @@ class UserService:
         if user.role != UserRole.SUPPORT:
             raise ValueError("User is not a support user")
 
-        # Revert to guest
-        user.role = UserRole.GUEST
+        # Deactivate user and remove relationship
+        user.is_active = False
         user.parent_id = None
         user.permissions = []
         user.updated_at = datetime.now(UTC)

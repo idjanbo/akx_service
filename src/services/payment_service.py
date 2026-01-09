@@ -23,6 +23,7 @@ from src.models.token import Token, TokenChainSupport
 from src.models.user import User, UserRole
 from src.models.wallet import Wallet, WalletType
 from src.schemas.payment import PaymentErrorCode
+from src.utils.helpers import format_utc_datetime
 
 if TYPE_CHECKING:
     from src.services.ledger_service import LedgerService
@@ -315,6 +316,7 @@ class PaymentService:
         amount: Decimal,
         callback_url: str,
         extra_data: str | None = None,
+        requested_currency: str = "USDT",
     ) -> Order:
         """Create a new deposit order.
 
@@ -323,9 +325,10 @@ class PaymentService:
             out_trade_no: External trade number
             token: Token
             chain: Chain
-            amount: Deposit amount
+            amount: Deposit amount (in requested_currency)
             callback_url: Callback URL
             extra_data: Extra data
+            requested_currency: Currency of amount (USDT for crypto, CNY/USD for fiat)
 
         Returns:
             Created order
@@ -355,24 +358,48 @@ class PaymentService:
                 "No available deposit address",
             )
 
+        # Calculate payment amount based on currency
+        payment_amount = amount
+        exchange_rate: Decimal | None = None
+        requested_currency_upper = requested_currency.upper()
+
+        if requested_currency_upper != token.code.upper():
+            # Need to convert from fiat to crypto
+            from src.services.exchange_rate_service import ExchangeRateService
+
+            rate_service = ExchangeRateService(self.db)
+            calc_result = await rate_service.calculate_payment_amount(
+                user_id=merchant.id,  # type: ignore
+                requested_amount=amount,
+                requested_currency=requested_currency_upper,
+                payment_currency=token.code.upper(),
+            )
+            if not calc_result:
+                raise PaymentError(
+                    PaymentErrorCode.INVALID_REQUEST,
+                    f"无法获取 {token.code}/{requested_currency_upper} 汇率",
+                )
+            payment_amount = calc_result["payment_amount"]
+            exchange_rate = calc_result["exchange_rate"]
+
         # Check minimum deposit
         support = await self.get_token_chain_support(token.id, chain.id)
         if support and support.min_deposit:
             min_amount = Decimal(support.min_deposit)
-            if amount < min_amount:
+            if payment_amount < min_amount:
                 raise PaymentError(
                     PaymentErrorCode.AMOUNT_TOO_SMALL,
-                    f"Amount must be at least {min_amount}",
+                    f"Amount must be at least {min_amount} {token.code}",
                 )
 
-        # Calculate deposit fee
-        fee = await self._calculate_deposit_fee(merchant, amount, support)
+        # Calculate deposit fee (based on actual payment amount)
+        fee = await self._calculate_deposit_fee(merchant, payment_amount, support)
 
         # Generate unique payment amount to avoid collisions
         from src.utils.amount import generate_unique_amount
 
         try:
-            unique_amount = await generate_unique_amount(self.db, wallet.address, amount)
+            unique_amount = await generate_unique_amount(self.db, wallet.address, payment_amount)
         except ValueError as e:
             raise PaymentError(
                 PaymentErrorCode.WALLET_NOT_AVAILABLE,
@@ -388,8 +415,10 @@ class PaymentService:
             merchant_id=merchant.id,
             token=token.code,
             chain=chain.code.lower(),
-            requested_amount=amount,  # 商户请求的原始金额
-            amount=unique_amount,  # 用户实际支付金额（含尾数）
+            requested_amount=amount,  # 商户请求的原始金额（可能是法币）
+            requested_currency=requested_currency_upper,  # 请求金额的币种
+            exchange_rate=exchange_rate,  # 下单时使用的汇率
+            amount=unique_amount,  # 用户实际支付金额（加密货币，含尾数）
             fee=fee,
             net_amount=unique_amount - fee,  # 用户实际到账 = 实付金额 - 手续费
             wallet_address=wallet.address,
@@ -593,8 +622,8 @@ class PaymentService:
             "to_address": order.to_address,
             "tx_hash": order.tx_hash,
             "confirmations": order.confirmations,
-            "created_at": order.created_at.isoformat() if order.created_at else None,
-            "completed_at": order.completed_at.isoformat() if order.completed_at else None,
+            "created_at": format_utc_datetime(order.created_at),
+            "completed_at": format_utc_datetime(order.completed_at),
             "extra_data": order.extra_data,
         }
 
@@ -693,7 +722,7 @@ class PaymentService:
             "to_address": order.to_address,
             "tx_hash": order.tx_hash,
             "confirmations": order.confirmations,
-            "completed_at": order.completed_at.isoformat() if order.completed_at else None,
+            "completed_at": format_utc_datetime(order.completed_at),
             "extra_data": order.extra_data,
             "timestamp": timestamp,
             "sign": signature,

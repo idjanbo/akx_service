@@ -232,6 +232,8 @@ async def get_me(
         except Exception:
             totp_enabled = False
 
+    from src.utils.helpers import format_utc_datetime
+
     # Base response
     response = {
         "id": user.id,
@@ -242,8 +244,8 @@ async def get_me(
         "role": user.role.value,
         "is_active": user.is_active,
         "totp_enabled": totp_enabled,
-        "created_at": user.created_at.isoformat(),
-        "updated_at": user.updated_at.isoformat(),
+        "created_at": format_utc_datetime(user.created_at),
+        "updated_at": format_utc_datetime(user.updated_at),
     }
 
     # For merchants: include merchant keys and balance

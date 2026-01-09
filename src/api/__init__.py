@@ -57,6 +57,13 @@ def register_routers(app: FastAPI) -> None:
     app.include_router(fee_configs_router, prefix="/api")
     app.include_router(ledger_router, prefix="/api")
 
+    # Exchange Rate management
+    from src.api.exchange_rate_sources import router as exchange_rate_sources_router
+    from src.api.exchange_rates import router as exchange_rates_router
+
+    app.include_router(exchange_rate_sources_router, prefix="/api")
+    app.include_router(exchange_rates_router, prefix="/api")
+
     # Web3 & Blockchain
     from src.api.chains_tokens import router as chains_tokens_router
     from src.api.webhook_providers import router as webhook_providers_router
@@ -65,3 +72,8 @@ def register_routers(app: FastAPI) -> None:
     app.include_router(chains_tokens_router)
     app.include_router(webhook_providers_router, prefix="/api")
     app.include_router(webhooks_router)  # Blockchain webhook callbacks
+
+    # Cashier (public payment pages)
+    from src.api.cashier import router as cashier_router
+
+    app.include_router(cashier_router)  # Public pages at /pay/{order_no}

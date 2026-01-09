@@ -12,7 +12,7 @@ from src.models.token import Token
 from src.models.user import User
 from src.models.wallet import Wallet, WalletType
 from src.utils.crypto import generate_wallet_for_chain, validate_address_for_chain
-from src.utils.helpers import get_token_name
+from src.utils.helpers import format_utc_datetime, get_token_name
 from src.utils.pagination import PaginatedResult, PaginationParams, paginate_query
 
 
@@ -146,7 +146,7 @@ class WalletService:
             "merchant_name": merchant_name,
             "remark": wallet.label,
             "is_active": wallet.is_active,
-            "created_at": wallet.created_at.isoformat() if wallet.created_at else "",
+            "created_at": format_utc_datetime(wallet.created_at) or "",
         }
 
     async def generate_wallets(
@@ -523,7 +523,7 @@ class WalletService:
             "merchant_name": user_names.get(wallet.user_id) if wallet.user_id else None,
             "remark": wallet.label,
             "is_active": wallet.is_active,
-            "created_at": wallet.created_at.isoformat() if wallet.created_at else "",
+            "created_at": format_utc_datetime(wallet.created_at) or "",
         }
 
     def _wallet_to_dict_v2(self, wallet: Wallet) -> dict[str, Any]:
@@ -543,5 +543,5 @@ class WalletService:
             "merchant_name": wallet.user.email if wallet.user else None,
             "remark": wallet.label,
             "is_active": wallet.is_active,
-            "created_at": wallet.created_at.isoformat() if wallet.created_at else "",
+            "created_at": format_utc_datetime(wallet.created_at) or "",
         }

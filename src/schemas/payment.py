@@ -38,7 +38,11 @@ class CreateDepositRequest(PaymentBaseRequest):
     out_trade_no: str = Field(..., max_length=64, description="外部交易号")
     token: str = Field(..., description="币种：USDT / USDC / ETH / TRX / SOL")
     chain: str = Field(..., description="区块链网络：tron / ethereum / solana")
-    amount: str = Field(..., description="充值金额（最多8位小数）")
+    amount: str = Field(..., description="金额（最多8位小数）")
+    currency: str = Field(
+        default="USDT",
+        description="金额币种：USDT(加密货币原价) / CNY / USD 等法币代码",
+    )
     callback_url: str = Field(..., max_length=500, description="回调通知地址")
     extra_data: str | None = Field(None, max_length=1024, description="附加数据")
 
@@ -66,8 +70,12 @@ class CreateDepositResponse(BaseModel):
     out_trade_no: str = Field(..., description="外部交易号")
     token: str = Field(..., description="币种")
     chain: str = Field(..., description="区块链网络")
-    amount: str = Field(..., description="充值金额")
+    requested_currency: str = Field(..., description="请求的币种")
+    requested_amount: str = Field(..., description="请求的原始金额")
+    exchange_rate: str | None = Field(None, description="汇率（法币订单时有值）")
+    amount: str = Field(..., description="实际支付金额（含防重复尾数）")
     wallet_address: str = Field(..., description="充值地址")
+    cashier_url: str = Field(..., description="收银台页面链接")
     expire_time: datetime = Field(..., description="过期时间")
     created_at: datetime = Field(..., description="创建时间")
 

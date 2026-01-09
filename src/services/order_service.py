@@ -13,6 +13,7 @@ from src.schemas.order import (
     ForceCompleteRequest,
     OrderQueryParams,
 )
+from src.utils.helpers import format_utc_datetime
 
 
 class OrderService:
@@ -245,7 +246,9 @@ class OrderService:
             "merchant_id": order.merchant_id,
             "token": order.token,
             "chain": order.chain,
+            "requested_currency": order.requested_currency,
             "requested_amount": str(order.requested_amount) if order.requested_amount else None,
+            "exchange_rate": str(order.exchange_rate) if order.exchange_rate else None,
             "amount": str(order.amount),
             "fee": str(order.fee),
             "net_amount": str(order.net_amount),
@@ -256,13 +259,11 @@ class OrderService:
             "status": order.status.value,
             "callback_status": order.callback_status.value,
             "callback_retry_count": order.callback_retry_count,
-            "last_callback_at": (
-                order.last_callback_at.isoformat() if order.last_callback_at else None
-            ),
+            "last_callback_at": format_utc_datetime(order.last_callback_at),
             "extra_data": order.extra_data,
             "remark": order.remark,
-            "expire_time": order.expire_time.isoformat() if order.expire_time else None,
-            "completed_at": order.completed_at.isoformat() if order.completed_at else None,
-            "created_at": order.created_at.isoformat(),
-            "updated_at": order.updated_at.isoformat(),
+            "expire_time": format_utc_datetime(order.expire_time),
+            "completed_at": format_utc_datetime(order.completed_at),
+            "created_at": format_utc_datetime(order.created_at),
+            "updated_at": format_utc_datetime(order.updated_at),
         }

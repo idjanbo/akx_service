@@ -1,6 +1,7 @@
 """Models module - SQLModel database entities."""
 
 from src.models.chain import Chain
+from src.models.exchange_rate import ExchangeRate, ExchangeRateMode, ExchangeRateSource
 from src.models.fee_config import FeeConfig
 from src.models.ledger import (
     BalanceChangeType,
@@ -37,6 +38,10 @@ __all__ = [
     "UserRole",
     # Fee Config
     "FeeConfig",
+    # Exchange Rate
+    "ExchangeRateSource",
+    "ExchangeRate",
+    "ExchangeRateMode",
     # Order
     "Order",
     "OrderType",

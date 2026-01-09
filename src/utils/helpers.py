@@ -1,6 +1,24 @@
 """Response model builder utilities."""
 
+from datetime import datetime
 from typing import Any
+
+
+def format_utc_datetime(dt: datetime | None) -> str | None:
+    """Format datetime to ISO string with Z suffix for UTC.
+
+    后端存储 UTC 时间（datetime.utcnow()），但 Python 的 isoformat()
+    不会添加时区信息。添加 Z 后缀让前端 new Date() 正确识别为 UTC。
+
+    Args:
+        dt: datetime object (assumed UTC) or None
+
+    Returns:
+        ISO format string with Z suffix (e.g., "2026-01-10T10:30:00Z") or None
+    """
+    if dt is None:
+        return None
+    return f"{dt.isoformat()}Z"
 
 
 def build_lookup_maps(

@@ -4,6 +4,13 @@
 
 AKX 支付网关提供加密货币充值和提现服务，支持多链、多币种交易。
 
+### 核心特性
+
+- **多链支持**：TRON、Ethereum、BSC、Solana、TON
+- **多币种**：USDT、USDC、TRX、ETH、SOL、BNB、TON
+- **法币金额支持**：可以用 CNY/USD 等法币金额创建订单，系统自动按汇率计算 USDT 金额
+- **商户汇率配置**：支持使用系统汇率、浮动调整或完全自定义
+
 ### 支持的币种和链
 
 | 币种 (token) | 支持链 (chain) |
@@ -64,9 +71,13 @@ deposit_key = "your_deposit_key_64_chars..."
 timestamp = int(time.time() * 1000)  # 毫秒时间戳
 nonce = secrets.token_hex(16)  # 32位随机字符串
 
-# 签名字段顺序：merchant_no + timestamp + nonce + out_trade_no + token + chain + amount + callback_url
-message = merchant_no + str(timestamp) + nonce + "ORDER001" + "USDT" + "tron" + "100.00" + "https://example.com/callback"
+# 签名字段顺序：merchant_no + timestamp + nonce + out_trade_no + token + chain + amount + currency + callback_url
+message = merchant_no + str(timestamp) + nonce + "ORDER001" + "USDT" + "TRON" + "100.00" + "USDT" + "https://example.com/callback"
 sign = generate_sign(message, deposit_key)
+
+# 法币金额示例：使用 CNY 金额
+message_cny = merchant_no + str(timestamp) + nonce + "ORDER002" + "USDT" + "TRON" + "100.00" + "CNY" + "https://example.com/callback"
+sign_cny = generate_sign(message_cny, deposit_key)
 ```
 
 #### Java 示例
@@ -127,18 +138,29 @@ public class SignUtil {
 | `out_trade_no` | string | 是 | 外部交易号（最长64字符，商户系统唯一订单号） |
 | `token` | string | 是 | 币种：`USDT` / `USDC` / `TRX` / `ETH` / `SOL` / `BNB` / `TON` |
 | `chain` | string | 是 | 区块链网络：`TRON` / `ETH` / `BSC` / `SOL` / `TON` |
-| `amount` | string | 是 | 充值金额（最多8位小数） |
+| `amount` | string | 是 | 金额（最多8位小数） |
+| `currency` | string | 否 | 金额币种，默认 `USDT`。可传 `CNY`/`USD` 等法币代码 |
 | `callback_url` | string | 是 | 回调通知地址 |
 | `extra_data` | string | 否 | 附加数据（最长1024字符，回调时原样返回） |
+
+### currency 参数说明
+
+- **`USDT`**（默认）：`amount` 直接为加密货币金额，如 `"100.00"` 表示 100 USDT
+- **`CNY`/`USD`/等法币**：`amount` 为法币金额，系统根据商户汇率配置自动计算 USDT 金额
+
+> 例如：`amount: "100.00", currency: "CNY"`，汇率 7.2 时，实际支付约 13.89 USDT
 
 ### 签名字段顺序
 
 ```
-merchant_no + timestamp + nonce + out_trade_no + token + chain + amount + callback_url
+merchant_no + timestamp + nonce + out_trade_no + token + chain + amount + currency + callback_url
 ```
+
+> **注意**：如果不传 `currency`，签名时使用默认值 `USDT`
 
 ### 请求示例
 
+**示例 1：直接使用 USDT 金额**
 ```json
 {
   "merchant_no": "M1234567890123",
@@ -146,7 +168,7 @@ merchant_no + timestamp + nonce + out_trade_no + token + chain + amount + callba
   "nonce": "abc123def456ghij7890",
   "out_trade_no": "ORDER20231212001",
   "token": "USDT",
-  "chain": "tron",
+  "chain": "TRON",
   "amount": "100.00",
   "callback_url": "https://yoursite.com/api/callback",
   "extra_data": "{\"user_id\":12345}",
@@ -154,7 +176,45 @@ merchant_no + timestamp + nonce + out_trade_no + token + chain + amount + callba
 }
 ```
 
+**示例 2：使用法币金额（系统自动计算 USDT）**
+```json
+{
+  "merchant_no": "M1234567890123",
+  "timestamp": 1702345678000,
+  "nonce": "abc123def456ghij7890",
+  "out_trade_no": "ORDER20231212002",
+  "token": "USDT",
+  "chain": "TRON",
+  "amount": "100.00",
+  "currency": "CNY",
+  "callback_url": "https://yoursite.com/api/callback",
+  "sign": "f1e2d3c4b5a6..."
+}
+```
+
+### 响应参数
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `success` | bool | 是否成功 |
+| `order_no` | string | 系统订单号 |
+| `out_trade_no` | string | 商户订单号 |
+| `token` | string | 币种（大写） |
+| `chain` | string | 区块链（大写） |
+| `requested_currency` | string | 请求的币种（与请求中的 `currency` 相同） |
+| `requested_amount` | string | 请求的原始金额（与请求中的 `amount` 相同） |
+| `exchange_rate` | string | 使用的汇率（法币订单时有值） |
+| `amount` | string | **实际支付金额**（USDT，含防重复尾数） |
+| `wallet_address` | string | 收款钱包地址 |
+| `cashier_url` | string | 收银台页面 URL |
+| `expire_time` | string | 过期时间 (ISO 8601) |
+| `created_at` | string | 创建时间 (ISO 8601) |
+
 ### 响应示例
+
+**示例 1：USDT 金额订单**
+
+请求 `amount: "100.00", currency: "USDT"`
 
 ```json
 {
@@ -162,13 +222,44 @@ merchant_no + timestamp + nonce + out_trade_no + token + chain + amount + callba
   "order_no": "DEP1702345678000ABC12345",
   "out_trade_no": "ORDER20231212001",
   "token": "USDT",
-  "chain": "tron",
-  "amount": "100.00",
+  "chain": "TRON",
+  "requested_currency": "USDT",
+  "requested_amount": "100.00",
+  "exchange_rate": null,
+  "amount": "100.00123",
   "wallet_address": "TXyz...abc",
+  "cashier_url": "https://api.akx.com/pay/DEP1702345678000ABC12345",
   "expire_time": "2023-12-12T12:30:00Z",
   "created_at": "2023-12-12T12:00:00Z"
 }
 ```
+
+**示例 2：法币金额订单（CNY → USDT）**
+
+请求 `amount: "100.00", currency: "CNY"`
+
+```json
+{
+  "success": true,
+  "order_no": "DEP1702345678000DEF67890",
+  "out_trade_no": "ORDER20231212002",
+  "token": "USDT",
+  "chain": "TRON",
+  "requested_currency": "CNY",
+  "requested_amount": "100.00",
+  "exchange_rate": "7.25000000",
+  "amount": "13.79310345",
+  "wallet_address": "TXyz...abc",
+  "cashier_url": "https://api.akx.com/pay/DEP1702345678000DEF67890",
+  "expire_time": "2023-12-12T12:30:00Z",
+  "created_at": "2023-12-12T12:00:00Z"
+}
+```
+
+> **金额说明**：
+> - `requested_amount`: 商户请求的原始金额（100 CNY）
+> - `exchange_rate`: 汇率（1 USDT = 7.25 CNY）
+> - `amount`: 用户需要支付的 USDT 金额（100 ÷ 7.25 ≈ 13.79 USDT）
 
 ### 重要说明
 
@@ -210,7 +301,7 @@ merchant_no + timestamp + nonce + out_trade_no + token + chain + amount + to_add
   "nonce": "xyz789abc123def456",
   "out_trade_no": "WD20231212001",
   "token": "USDT",
-  "chain": "tron",
+  "chain": "TRON",
   "amount": "50.00",
   "to_address": "TLive...xyz",
   "callback_url": "https://yoursite.com/api/callback",
@@ -227,7 +318,7 @@ merchant_no + timestamp + nonce + out_trade_no + token + chain + amount + to_add
   "order_no": "WIT1702345678000DEF67890",
   "out_trade_no": "WD20231212001",
   "token": "USDT",
-  "chain": "tron",
+  "chain": "TRON",
   "amount": "50.00",
   "fee": "1.00",
   "net_amount": "49.00",
@@ -313,7 +404,7 @@ merchant_no + timestamp + nonce + out_trade_no + order_type
   "out_trade_no": "ORDER20231212001",
   "order_type": "deposit",
   "token": "USDT",
-  "chain": "tron",
+  "chain": "TRON",
   "amount": "100.00",
   "fee": "0.00",
   "net_amount": "100.00",
@@ -379,7 +470,7 @@ merchant_no + order_no + status + amount
   "out_trade_no": "ORDER20231212001",
   "order_type": "deposit",
   "token": "USDT",
-  "chain": "tron",
+  "chain": "TRON",
   "amount": "100.00",
   "fee": "0.00",
   "net_amount": "100.00",

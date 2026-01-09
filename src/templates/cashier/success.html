@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>支付成功 - {{ order.order_no }}</title>
+    <link href="/static/css/pay.css" rel="stylesheet">
+</head>
+<body>
+<div class="main">
+    <div class="logo">
+        <h1><img src="/static/images/tokens/{{ order.token|lower }}.svg" alt="{{ order.token }}" height="40"></h1>
+    </div>
+    <div class="container page-result">
+        <div class="result-content">
+            <div class="result-icon success">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                    <polyline points="22 4 12 14.01 9 11.01"/>
+                </svg>
+            </div>
+            <p class="result-title success">支付成功</p>
+            <p class="result-subtitle">订单已完成，感谢您的使用！</p>
+            <div class="result-details">
+                <div class="detail-row">
+                    <span class="detail-label">订单号</span>
+                    <span class="detail-value">{{ order.order_no }}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">支付金额</span>
+                    <span class="detail-value">{{ order.amount }} {{ order.token }}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">支付网络</span>
+                    <span class="detail-value">{{ order.chain }}</span>
+                </div>
+                {% if order.tx_hash %}
+                <div class="detail-row">
+                    <span class="detail-label">交易哈希</span>
+                    <span class="detail-value tx-hash">{{ order.tx_hash[:10] }}...{{ order.tx_hash[-6:] }}</span>
+                </div>
+                {% endif %}
+                {% if order.completed_at %}
+                <div class="detail-row">
+                    <span class="detail-label">完成时间</span>
+                    <span class="detail-value">{{ order.completed_at[:19].replace('T', ' ') }}</span>
+                </div>
+                {% endif %}
+            </div>
+            <div class="result-tips">
+                <p>支付已完成，系统将自动通知商家</p>
+                <p>如有疑问，请联系商家客服处理</p>
+            </div>
+        </div>
+    </div>
+</div>
+</body>
+</html>

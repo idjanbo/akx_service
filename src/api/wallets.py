@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.api.deps import CurrentUser
 from src.db import get_db
 from src.services.wallet_service import WalletService
+from src.utils.helpers import format_utc_datetime
 from src.utils.pagination import PaginationParams
 
 router = APIRouter()
@@ -241,7 +242,7 @@ async def generate_wallets(
                 merchant_name=None,  # TODO: get from user
                 remark=w.label,
                 is_active=w.is_active,
-                created_at=w.created_at.isoformat(),
+                created_at=format_utc_datetime(w.created_at),
             )
         )
 

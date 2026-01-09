@@ -10,6 +10,7 @@ import sqlalchemy as sa
 from sqlmodel import Field, Relationship, SQLModel
 
 if TYPE_CHECKING:
+    from src.models.exchange_rate import ExchangeRate
     from src.models.fee_config import FeeConfig
     from src.models.wallet import Wallet
 
@@ -111,6 +112,7 @@ class User(SQLModel, table=True):
         back_populates="users",
         sa_relationship_kwargs={"lazy": "selectin"},
     )
+    exchange_rates: list["ExchangeRate"] = Relationship(back_populates="user")
     # Self-referential relationship for parent merchant
     parent: Optional["User"] = Relationship(
         sa_relationship_kwargs={

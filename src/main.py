@@ -2,13 +2,18 @@
 
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from src.api import register_routers
 from src.core.config import get_settings
 from src.db import close_db
+
+# Base directory for static files
+BASE_DIR = Path(__file__).resolve().parent
 
 
 @asynccontextmanager
@@ -54,6 +59,9 @@ def create_app() -> FastAPI:
 
     # Register all API routers
     register_routers(app)
+
+    # Mount static files
+    app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 
     @app.get("/health")
     async def health_check() -> dict[str, str]:

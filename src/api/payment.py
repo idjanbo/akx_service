@@ -15,6 +15,7 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.core.config import get_settings
 from src.core.exceptions import InsufficientBalanceError
 from src.db import get_db
 from src.models.order import OrderType
@@ -79,10 +80,11 @@ async def create_deposit(
     """Create a deposit order.
 
     Signature field order:
-    merchant_no + timestamp + nonce + out_trade_no + token + chain + amount + callback_url
+    merchant_no + timestamp + nonce + out_trade_no + token + chain
+    + amount + currency + callback_url
     """
     try:
-        # Build signature message
+        # Build signature message (currency included)
         sign_message = (
             f"{request.merchant_no}"
             f"{request.timestamp}"
@@ -91,6 +93,7 @@ async def create_deposit(
             f"{request.token}"
             f"{request.chain}"
             f"{request.amount}"
+            f"{request.currency}"
             f"{request.callback_url}"
         )
 
@@ -106,7 +109,7 @@ async def create_deposit(
         # Validate token and chain
         token, chain = await service.validate_token_chain(request.token, request.chain)
 
-        # Create order
+        # Create order with currency support
         order = await service.create_deposit_order(
             merchant=merchant,
             out_trade_no=request.out_trade_no,
@@ -115,16 +118,25 @@ async def create_deposit(
             amount=Decimal(request.amount),
             callback_url=request.callback_url,
             extra_data=request.extra_data,
+            requested_currency=request.currency,
         )
+
+        # Build cashier URL
+        settings = get_settings()
+        cashier_url = f"{settings.api_base_url}/pay/{order.order_no}"
 
         return CreateDepositResponse(
             success=True,
             order_no=order.order_no,
             out_trade_no=order.out_trade_no,
-            token=order.token,
-            chain=order.chain,
+            token=order.token.upper(),
+            chain=order.chain.upper(),
+            requested_currency=order.requested_currency,
+            requested_amount=str(order.requested_amount),
+            exchange_rate=str(order.exchange_rate) if order.exchange_rate else None,
             amount=str(order.amount),
             wallet_address=order.wallet_address or "",
+            cashier_url=cashier_url,
             expire_time=order.expire_time,
             created_at=order.created_at,
         )
@@ -223,8 +235,8 @@ async def create_withdraw(
             success=True,
             order_no=order.order_no,
             out_trade_no=order.out_trade_no,
-            token=order.token,
-            chain=order.chain,
+            token=order.token.upper(),
+            chain=order.chain.upper(),
             amount=str(order.amount),
             fee=str(order.fee),
             net_amount=str(order.net_amount),
@@ -316,8 +328,8 @@ async def query_order(
             order_no=order.order_no,
             out_trade_no=order.out_trade_no,
             order_type=order.order_type.value,
-            token=order.token,
-            chain=order.chain,
+            token=order.token.upper(),
+            chain=order.chain.upper(),
             amount=str(order.amount),
             fee=str(order.fee),
             net_amount=str(order.net_amount),
@@ -417,8 +429,8 @@ async def query_order_by_out_trade_no(
             order_no=order.order_no,
             out_trade_no=order.out_trade_no,
             order_type=order.order_type.value,
-            token=order.token,
-            chain=order.chain,
+            token=order.token.upper(),
+            chain=order.chain.upper(),
             amount=str(order.amount),
             fee=str(order.fee),
             net_amount=str(order.net_amount),

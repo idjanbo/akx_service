@@ -39,6 +39,7 @@ from src.models.token import Token
 from src.models.user import User
 from src.models.wallet import Wallet, WalletType
 from src.utils.crypto import generate_wallet_for_chain
+from src.utils.helpers import format_utc_datetime
 
 
 class RechargeService:
@@ -197,9 +198,7 @@ class RechargeService:
             "qr_content": wallet.address,  # QR code content is just the address
             "min_recharge": None,  # Can be configured per chain if needed
             "confirmations": chain.confirmation_blocks,
-            "assigned_at": recharge_address.assigned_at.isoformat()
-            if recharge_address.assigned_at
-            else None,
+            "assigned_at": format_utc_datetime(recharge_address.assigned_at),
         }
 
     # ============ Recharge Order Management ============
@@ -269,7 +268,7 @@ class RechargeService:
             "token": token.code if token else token_code,
             "token_name": token.name if token else "",
             "expected_amount": str(amount),
-            "expires_at": expires_at.isoformat(),
+            "expires_at": format_utc_datetime(expires_at),
             "status": order.status.value,
             "required_confirmations": order.required_confirmations,
         }
@@ -696,9 +695,9 @@ class RechargeService:
             "tx_hash": order.tx_hash,
             "confirmations": order.confirmations,
             "required_confirmations": order.required_confirmations,
-            "expires_at": order.expires_at.isoformat() if order.expires_at else None,
-            "detected_at": order.detected_at.isoformat() if order.detected_at else None,
-            "confirmed_at": order.confirmed_at.isoformat() if order.confirmed_at else None,
-            "credited_at": order.credited_at.isoformat() if order.credited_at else None,
-            "created_at": order.created_at.isoformat() if order.created_at else None,
+            "expires_at": format_utc_datetime(order.expires_at),
+            "detected_at": format_utc_datetime(order.detected_at),
+            "confirmed_at": format_utc_datetime(order.confirmed_at),
+            "credited_at": format_utc_datetime(order.credited_at),
+            "created_at": format_utc_datetime(order.created_at),
         }

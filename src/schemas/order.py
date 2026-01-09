@@ -23,7 +23,9 @@ class OrderResponse(BaseModel):
     # Payment details
     token: str
     chain: str
+    requested_currency: str | None = None
     requested_amount: Decimal | None = None
+    exchange_rate: Decimal | None = None
     amount: Decimal
     fee: Decimal
     net_amount: Decimal

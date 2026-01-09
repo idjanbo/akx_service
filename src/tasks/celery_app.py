@@ -10,7 +10,12 @@ celery_app = Celery(
     "akx_tasks",
     broker=settings.redis_url,
     backend=settings.redis_url,
-    include=["src.tasks.callback", "src.tasks.blockchain", "src.tasks.orders"],
+    include=[
+        "src.tasks.callback",
+        "src.tasks.blockchain",
+        "src.tasks.orders",
+        "src.tasks.exchange_rates",
+    ],
 )
 
 celery_app.conf.update(
@@ -27,13 +32,18 @@ celery_app.conf.update(
     task_max_retries=5,
     task_routes={
         "src.tasks.callback.*": {"queue": "callbacks"},
-        "src.tasks.blockchain.*": {"queue": "blockchain"},
-        "src.tasks.orders.*": {"queue": "orders"},
+        "blockchain.*": {"queue": "blockchain"},
+        "order.*": {"queue": "orders"},
+        "exchange_rates.*": {"queue": "exchange_rates"},
     },
     beat_schedule={
         "confirm-transactions": {
             "task": "blockchain.confirm_transactions",
             "schedule": 30.0,
+        },
+        "sync-exchange-rates": {
+            "task": "exchange_rates.sync_all",
+            "schedule": 10.0,  # 每 10 秒检查一次，具体同步间隔由各源的 sync_interval 决定
         },
     },
 )

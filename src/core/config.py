@@ -42,6 +42,12 @@ class Settings(BaseSettings):
         description="Frontend application URL for redirects",
     )
 
+    # API Base URL (for cashier page links)
+    api_base_url: str = Field(
+        default="http://localhost:8000",
+        description="API base URL for cashier page links",
+    )
+
     # TRON (Primary Chain)
     tron_api_key: str = Field(default="", description="TronGrid API key")
     tron_network: Literal["mainnet", "shasta", "nile"] = Field(
@@ -69,7 +75,7 @@ class Settings(BaseSettings):
 
     # Payment settings
     deposit_expiry_seconds: int = Field(
-        default=30, description="Deposit order expiry time in seconds"
+        default=600, description="Deposit order expiry time in seconds"
     )
     timestamp_validity_minutes: int = Field(
         default=5, description="API request timestamp validity window in minutes"

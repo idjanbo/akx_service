@@ -10,6 +10,7 @@ from src.utils.totp import decrypt_totp_secret, require_totp_code, totp_required
 
 __all__ = [
     "CurrentUser",
+    "NonGuestUser",
     "SuperAdmin",
     "TOTPUser",
     "require_totp_code",
@@ -52,6 +53,18 @@ async def require_super_admin(
     return user
 
 
+async def require_non_guest(
+    user: Annotated[User, Depends(get_current_user)],
+) -> User:
+    """确保用户是商户或管理员（排除客服角色）。"""
+    if user.role == UserRole.SUPPORT:
+        raise HTTPException(
+            status_code=403,
+            detail="客服无权执行此操作",
+        )
+    return user
+
+
 # ============ Type Aliases for Common Dependencies ============
 # 使用这些类型别名可以让代码更简洁
 
@@ -60,6 +73,9 @@ CurrentUser = Annotated[User, Depends(get_current_user)]
 
 # 已绑定 TOTP 的用户（只检查绑定，不验证码）
 TOTPUser = Annotated[User, Depends(get_totp_verified_user)]
+
+# 非访客用户（商户或更高权限）
+NonGuestUser = Annotated[User, Depends(require_non_guest)]
 
 # 超级管理员
 SuperAdmin = Annotated[User, Depends(require_super_admin)]

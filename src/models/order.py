@@ -122,9 +122,19 @@ class Order(SQLModel, table=True):
     # Payment details
     token: str = Field(max_length=20, index=True, description="Token code (uppercase)")
     chain: str = Field(max_length=20, index=True, description="Chain code (lowercase)")
+    requested_currency: str = Field(
+        max_length=20,
+        default="USDT",
+        description="Requested currency: USDT (crypto) or CNY/USD (fiat)",
+    )
     requested_amount: Decimal = Field(
         sa_column=sa.Column(sa.DECIMAL(32, 8), nullable=False),
         description="Merchant requested amount (original)",
+    )
+    exchange_rate: Decimal | None = Field(
+        default=None,
+        sa_column=sa.Column(sa.DECIMAL(20, 8), nullable=True),
+        description="Exchange rate used (when requested_currency is fiat)",
     )
     amount: Decimal = Field(
         sa_column=sa.Column(sa.DECIMAL(32, 8), nullable=False),

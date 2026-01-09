@@ -1,0 +1,429 @@
+/**
+ * AKX Cashier - 收银台支付页面样式
+ */
+
+/* ==================== 颜色变量 ==================== */
+:root {
+    /* 主色调 */
+    --color-primary: #009393;          /* 品牌主色 - tether 绿 */
+    --color-primary-light: #0f8;       /* 主色亮色 - 用于深色背景上的文字 */
+    
+    /* 深色系 */
+    --color-dark: #161141;             /* 深紫色 - 主要文字、边框 */
+    --color-dark-bg: #161141;          /* 深色背景 */
+    
+    /* 中性色 */
+    --color-text: #444;                /* 正文文字 */
+    --color-text-muted: #858a8e;       /* 次要文字、标签 */
+    --color-border: #d3d3d3;           /* 边框颜色 */
+    --color-border-light: #e0e5eb;     /* 浅色边框 */
+    
+    /* 背景色 */
+    --color-bg: #fff;                  /* 白色背景 */
+    --color-bg-muted: #f5f5f5;         /* 灰色背景 */
+    
+    /* 状态色 */
+    --color-success: #009393;          /* 成功 */
+    --color-error: #ef4444;            /* 错误 */
+    --color-warning: #f59e0b;          /* 警告 */
+    
+    /* 图标颜色 */
+    --color-icon: #161141;             /* 图标默认颜色 */
+    --color-icon-clock: currentColor;  /* 时钟图标颜色 */
+}
+
+/* ==================== 重置样式 ==================== */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: Montserrat, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: 18px;
+    color: var(--color-text);
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+}
+
+/* ==================== 主容器 ==================== */
+.main {
+    max-width: 350px;
+    width: 100%;
+    height: 100%;
+    margin: auto;
+    padding: 0 12px;
+    overflow-x: hidden;
+}
+
+.main .logo {
+    text-align: center;
+    margin: 10px 0;
+}
+
+.main .container {
+    background-color: var(--color-bg);
+    position: relative;
+    border-radius: 15px 15px 10px 10px;
+    padding: 30px 30px 50px;
+    border: 1px solid var(--color-border);
+}
+
+/* ==================== 收银信息 ==================== */
+.container .cashier-info {
+    margin-bottom: 20px;
+    border-bottom: .5px solid var(--color-border-light);
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    padding-bottom: 10px;
+}
+
+.cashier-info .label {
+    font-size: 14px;
+    color: var(--color-text-muted);
+    margin-bottom: 5px;
+}
+
+.cashier-info .amount {
+    font-weight: 600;
+    margin-right: 3px;
+}
+
+.cashier-info .currency {
+    margin-right: 3px;
+}
+
+.cashier-info .network-name {
+    margin-left: 3px;
+    font-size: 16px;
+}
+
+.cashier-info .rate {
+    font-size: 14px;
+    color: var(--color-text-muted);
+}
+
+.cashier-info .should-pay {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+/* ==================== 地址区域 ==================== */
+.container .address-guide {
+    font-size: 14px;
+    color: var(--color-text-muted);
+    margin: 20px auto;
+}
+
+.container .address-and-copy-container {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border: 1px dashed var(--color-dark);
+    box-sizing: border-box;
+    border-radius: 5px;
+    flex-wrap: wrap;
+    width: 100%;
+    border-top: none;
+}
+
+.address-and-copy-container > h4 {
+    font-weight: 700;
+    font-size: 12px;
+    text-align: center;
+    width: 100%;
+    background-color: var(--color-dark-bg);
+    margin: 0;
+    padding-top: 3px;
+    padding-bottom: 3px;
+    outline: 1px solid var(--color-dark);
+    border-radius: 5px 5px 0 0;
+    color: var(--color-primary-light);
+}
+
+.address-and-copy-container .address {
+    white-space: normal;
+    word-break: break-all;
+    padding: 8px;
+    font-weight: 600;
+    font-size: 14px;
+    color: var(--color-dark);
+    flex: 1;
+    border-right: 1px dashed var(--color-dark);
+}
+
+.address-and-copy-container .copy-icon-for-address {
+    min-width: 44px;
+    min-height: 44px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    cursor: pointer;
+}
+
+/* ==================== 警告文字 ==================== */
+.container .transfer-warning {
+    color: var(--color-dark);
+    font-size: 12px;
+    margin-top: 10px;
+}
+
+/* ==================== 二维码 ==================== */
+.container .qr-code-container {
+    display: flex;
+    justify-content: center;
+    margin: 20px auto;
+}
+
+.qr-code-container > img,
+.qr-code-container > canvas {
+    width: min(175px, 50vw);
+    height: min(175px, 50vw);
+    margin: 0 auto;
+}
+
+/* ==================== 页脚 ==================== */
+.container .footer {
+    position: absolute;
+    background-color: var(--color-bg-muted);
+    width: 100%;
+    min-height: 30px;
+    padding: 5px 15px;
+    padding-bottom: max(5px, env(safe-area-inset-bottom));
+    border-radius: 0 0 10px 10px;
+    border-top: 1px solid var(--color-border);
+    left: 0;
+    bottom: 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 11px;
+    font-weight: 500;
+}
+
+.footer .remaining-time {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.footer .remaining-time .icon {
+    vertical-align: middle;
+    line-height: 1;
+}
+
+/* ==================== 结果页面 ==================== */
+.page-result {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 400px;
+    padding: 40px 20px;
+}
+
+.page-result.hidden {
+    display: none;
+}
+
+.result-content {
+    text-align: center;
+    animation: fadeInUp 0.4s ease-out;
+}
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.result-icon {
+    width: 80px;
+    height: 80px;
+    margin: 0 auto 24px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.result-icon svg {
+    width: 48px;
+    height: 48px;
+}
+
+.result-icon.success {
+    background-color: rgba(0, 147, 147, 0.1);
+    color: var(--color-success);
+}
+
+.result-icon.expired {
+    background-color: rgba(239, 68, 68, 0.1);
+    color: var(--color-error);
+}
+
+.result-title {
+    font-size: 24px;
+    font-weight: 700;
+    margin-bottom: 8px;
+}
+
+.result-title.success {
+    color: var(--color-success);
+}
+
+.result-title.expired {
+    color: var(--color-error);
+}
+
+.result-subtitle {
+    font-size: 14px;
+    color: var(--color-text-muted);
+    margin-bottom: 24px;
+}
+
+.result-details {
+    background-color: var(--color-bg-muted);
+    border-radius: 8px;
+    padding: 16px 24px;
+    min-width: 260px;
+}
+
+.detail-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding: 10px 0;
+    gap: 16px;
+}
+
+.detail-row:not(:last-child) {
+    border-bottom: 1px solid var(--color-border-light);
+}
+
+.detail-label {
+    font-size: 13px;
+    color: var(--color-text-muted);
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.detail-value {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--color-dark);
+    text-align: right;
+    word-break: break-all;
+}
+
+.detail-value.tx-hash {
+    font-family: monospace;
+    font-size: 12px;
+}
+
+/* 结果页提示 */
+.result-tips {
+    margin-top: 20px;
+    padding: 12px 16px;
+    background-color: rgba(0, 147, 147, 0.08);
+    border-radius: 8px;
+    font-size: 13px;
+    color: var(--color-text-muted);
+    line-height: 1.8;
+    text-align: center;
+}
+
+.result-tips p {
+    margin: 0;
+}
+
+.result-tips.warning {
+    background-color: rgba(239, 68, 68, 0.08);
+}
+
+.result-tips .warning-title {
+    color: var(--color-error);
+    font-weight: 600;
+    margin-bottom: 4px;
+}
+
+.result-tips.warning p:first-child {
+    color: var(--color-error);
+    font-weight: 500;
+}
+
+/* 隐藏支付页面 */
+.page-payment.hidden {
+    display: none;
+}
+
+/* ==================== 图标 ==================== */
+.icon {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    vertical-align: middle;
+}
+
+.icon-sm {
+    width: 12px;
+    height: 12px;
+}
+
+.icon-copy {
+    background-color: var(--color-icon);
+    -webkit-mask: url('/static/images/icon-copy.svg') no-repeat center;
+    mask: url('/static/images/icon-copy.svg') no-repeat center;
+    -webkit-mask-size: contain;
+    mask-size: contain;
+}
+
+.icon-clock {
+    background-color: var(--color-text);
+    -webkit-mask: url('/static/images/icon-clock.svg') no-repeat center;
+    mask: url('/static/images/icon-clock.svg') no-repeat center;
+    -webkit-mask-size: contain;
+    mask-size: contain;
+}
+
+/* ==================== 复制按钮 ==================== */
+.clipboard-btn {
+    cursor: pointer;
+    transition: opacity 0.2s;
+    padding: 4px;
+}
+
+.clipboard-btn:hover {
+    opacity: 0.7;
+}
+
+.clipboard-btn:hover .icon-copy {
+    background-color: var(--color-primary);
+}
+
+/* ==================== 响应式 ==================== */
+@media (max-width: 380px) {
+    .main {
+        padding: 0 8px;
+    }
+    
+    .main .container {
+        padding: 20px 16px 50px;
+    }
+    
+    .cashier-info .amount {
+        font-size: 16px;
+    }
+    
+    .container .transfer-warning {
+        font-size: 11px;
+    }
+}

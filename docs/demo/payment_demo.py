@@ -3,7 +3,11 @@ AKX 支付网关 API 调用示例
 
 商户号：M3
 币种：USDT（大写）
-链：tron（小写）
+链：TRON（大写）
+
+新功能：支持法币金额创建订单
+- 直接使用 USDT 金额：currency="USDT"（默认）
+- 使用法币金额：currency="CNY"/"USD" 等，系统自动按汇率计算 USDT
 """
 
 import hashlib
@@ -20,9 +24,9 @@ MERCHANT_NO = "M3"
 DEPOSIT_KEY = "be9907aae0f3e532f24ece688f6dcb6114d1fce085abd60795ae9670923e83c1"
 WITHDRAW_KEY = "b77187fa76419ecf455dc8233ff7ab281184fff2e1d90c2bb97476fbb707d74f"
 
-# 默认币种和链
+# 默认币种和链（推荐使用大写格式）
 TOKEN = "USDT"
-CHAIN = "tron"  # 小写格式（后端会转换为小写）
+CHAIN = "TRON"
 
 
 def generate_sign(message: str, secret_key: str) -> str:
@@ -49,6 +53,7 @@ def create_deposit_order(
     out_trade_no: str,
     amount: str,
     callback_url: str,
+    currency: str = "USDT",
     extra_data: str | None = None,
 ) -> dict:
     """
@@ -56,8 +61,9 @@ def create_deposit_order(
 
     Args:
         out_trade_no: 商户订单号（唯一）
-        amount: 充值金额
+        amount: 金额（根据 currency 决定是 USDT 还是法币）
         callback_url: 回调通知地址
+        currency: 金额币种，默认 USDT。可传 CNY/USD 等法币代码
         extra_data: 附加数据（可选）
 
     Returns:
@@ -67,9 +73,11 @@ def create_deposit_order(
     nonce = get_nonce()
 
     # 签名字段顺序：
-    # merchant_no + timestamp + nonce + out_trade_no + token + chain + amount + callback_url
+    # merchant_no + timestamp + nonce + out_trade_no + token + chain
+    # + amount + currency + callback_url
     sign_message = (
-        f"{MERCHANT_NO}{timestamp}{nonce}{out_trade_no}{TOKEN}{CHAIN}{amount}{callback_url}"
+        f"{MERCHANT_NO}{timestamp}{nonce}{out_trade_no}"
+        f"{TOKEN}{CHAIN}{amount}{currency}{callback_url}"
     )
     sign = generate_sign(sign_message, DEPOSIT_KEY)
 
@@ -82,6 +90,7 @@ def create_deposit_order(
         "token": TOKEN,
         "chain": CHAIN,
         "amount": amount,
+        "currency": currency,
         "callback_url": callback_url,
         "sign": sign,
     }
@@ -94,7 +103,7 @@ def create_deposit_order(
     response = requests.post(url, json=payload, timeout=30)
 
     print(f"\n{'=' * 50}")
-    print("【创建充值订单】")
+    print(f"【创建充值订单】- 金额币种: {currency}")
     print(f"请求 URL: {url}")
     print(f"请求参数: {payload}")
     print(f"响应状态码: {response.status_code}")
@@ -224,20 +233,33 @@ if __name__ == "__main__":
     # 生成唯一订单号
     order_suffix = int(time.time())
 
-    # 测试充值
+    # 测试充值（直接使用 USDT 金额）
     print("\n" + "=" * 60)
-    print("测试 1: 创建充值订单")
+    print("测试 1: 创建充值订单（USDT 金额）")
     print("=" * 60)
     deposit_result = create_deposit_order(
         out_trade_no=f"DEP_TEST_{order_suffix}",
         amount="100.00",
         callback_url="https://example.com/callback/deposit",
+        currency="USDT",  # 默认值，可省略
         extra_data='{"user_id": 12345, "remark": "测试充值"}',
+    )
+
+    # 测试充值（使用法币金额，系统自动计算 USDT）
+    print("\n" + "=" * 60)
+    print("测试 2: 创建充值订单（CNY 金额，自动换算）")
+    print("=" * 60)
+    deposit_cny_result = create_deposit_order(
+        out_trade_no=f"DEP_CNY_{order_suffix}",
+        amount="100.00",  # 100 CNY
+        callback_url="https://example.com/callback/deposit",
+        currency="CNY",  # 使用人民币金额
+        extra_data='{"user_id": 12345, "remark": "测试 CNY 充值"}',
     )
 
     # 测试代付（提现）
     print("\n" + "=" * 60)
-    print("测试 2: 创建代付（提现）订单")
+    print("测试 3: 创建代付（提现）订单")
     print("=" * 60)
     withdraw_result = create_withdraw_order(
         out_trade_no=f"WD_TEST_{order_suffix}",
@@ -250,12 +272,12 @@ if __name__ == "__main__":
     # 测试查询订单（如果创建成功）
     if deposit_result.get("success") and deposit_result.get("order_no"):
         print("\n" + "=" * 60)
-        print("测试 3: 查询充值订单")
+        print("测试 4: 查询充值订单")
         print("=" * 60)
         query_order(deposit_result["order_no"], is_deposit=True)
 
     if withdraw_result.get("success") and withdraw_result.get("order_no"):
         print("\n" + "=" * 60)
-        print("测试 4: 查询提现订单")
+        print("测试 5: 查询提现订单")
         print("=" * 60)
         query_order(withdraw_result["order_no"], is_deposit=False)

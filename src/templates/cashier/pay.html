@@ -1,0 +1,92 @@
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>💲💲💲</title>
+    <!-- Styles -->
+    <link href="/static/css/pay.css" rel="stylesheet">
+    <link href="/static/css/jquery.toast@1.3.2.css" rel="stylesheet">
+</head>
+<body>
+<div class="main">
+    <div class="logo">
+        <h1><img src="/static/images/tokens/{{ order.token|lower }}.svg" alt="{{ order.token }}" height="40"></h1>
+    </div>
+    <div class="container">
+        <div class="cashier-info">
+            {% if order.requested_currency and order.requested_currency != order.token and order.requested_amount %}
+            <div>
+                <div class="label">总数</div>
+                <div>
+                    <span class="amount">{{ order.requested_amount }}</span>
+                    <span class="currency">{{ order.requested_currency }}</span>
+                </div>
+            </div>
+            {% if order.exchange_rate %}
+            <div>
+                <div class="label">汇率</div>
+                <div>
+                    <span class="rate">1 {{ order.token }} ≈ {{ "%.2f"|format(order.exchange_rate|float) }} {{ order.requested_currency }}</span>
+                </div>
+            </div>
+            {% endif %}
+            {% endif %}
+            <div>
+                <div class="label">应付金额</div>
+                <div class="should-pay">
+                    <div>
+                        <span class="amount" id="amount">{{ order.amount }}</span>
+                        <span class="currency">{{ order.token }}</span>
+                        <span class="network-name">({{ order.chain|upper }})</span>
+                    </div>
+                    <div class="clipboard-btn" data-clipboard-target="#amount">
+                        <span class="icon icon-copy"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="address-guide">请寄到以下地址</div>
+        <div class="address-and-copy-container">
+            <h4>仅限 {{ order.token }}-{{ order.chain|upper }}</h4>
+            <div class="address" id="address">{{ order.wallet_address }}</div>
+            <div class="copy-icon-for-address">
+                <div class="clipboard-btn" data-clipboard-target="#address">
+                    <span class="icon icon-copy"></span>
+                </div>
+            </div>
+        </div>
+        <p class="transfer-warning">请使用 {{ order.token }}-{{ order.chain|upper }} 充值，其他资产充值不可找回</p>
+        <p class="transfer-warning">部分平台可能会从转出金额中扣除手续费，导致到账金额错误，请务必注意</p>
+        <div class="address-guide">或扫描二维码</div>
+        <div class="qr-code-container">
+            <img alt="QR Code" src="" id="qrcode">
+        </div>
+        <div class="footer">
+            <span class="remaining-time">
+                <span class="icon icon-sm icon-clock"></span>
+                <span><span class="min">00</span>:<span class="sec">00</span></span> 剩余
+            </span>
+            <div>订单号: {{ order.order_no }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- 配置注入 -->
+<script>
+    window.AKX_CONFIG = {
+        orderNo: "{{ order.order_no }}",
+        walletAddress: "{{ order.wallet_address }}",
+        remainingSeconds: {{ order.remaining_seconds }}
+    };
+</script>
+
+<!-- JavaScript Libraries -->
+<script src="/static/js/jquery@3.7.1.js"></script>
+<script src="/static/js/clipboard@2.0.11.js"></script>
+<script src="/static/js/qrious@4.0.2.js"></script>
+<script src="/static/js/jquery.toast@1.3.2.js"></script>
+<script src="/static/js/pay.js"></script>
+</body>
+</html>

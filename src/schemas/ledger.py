@@ -44,15 +44,6 @@ class BalanceLedgerResponse(BaseModel):
         from_attributes = True
 
 
-class BalanceLedgerListResponse(BaseModel):
-    """Paginated balance ledger list response."""
-
-    items: list[BalanceLedgerResponse]
-    total: int
-    page: int
-    page_size: int
-
-
 class BalanceLedgerQueryParams(BaseModel):
     """Query parameters for balance ledger."""
 
@@ -61,8 +52,6 @@ class BalanceLedgerQueryParams(BaseModel):
     order_id: int | None = None
     start_date: datetime | None = None
     end_date: datetime | None = None
-    page: int = Field(default=1, ge=1)
-    page_size: int = Field(default=20, ge=1, le=100)
 
 
 class ManualBalanceAdjustRequest(BaseModel):
@@ -70,7 +59,10 @@ class ManualBalanceAdjustRequest(BaseModel):
 
     user_id: int
     change_type: Literal["manual_recharge", "manual_deduct", "adjustment", "refund"] = Field(
-        description="账变类型：manual_recharge=人工充值, manual_deduct=人工扣款, adjustment=调账, refund=退款"
+        description=(
+            "账变类型：manual_recharge=人工充值, "
+            "manual_deduct=人工扣款, adjustment=调账, refund=退款"
+        )
     )
     amount: Decimal = Field(description="Amount to add (positive) or deduct (negative)")
     remark: str = Field(min_length=1, max_length=500, description="Reason for adjustment")

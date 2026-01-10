@@ -2,13 +2,15 @@
 
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
+from fastapi_pagination.ext.sqlmodel import apaginate
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from src.core.security import decrypt_sensitive_data, encrypt_sensitive_data
 from src.models import Chain, WebhookProvider, WebhookProviderChain, WebhookProviderType
+from src.schemas.pagination import CustomPage
 from src.schemas.webhook_provider import (
     PROVIDER_TYPE_INFO,
     ProviderTypeInfo,
@@ -29,21 +31,17 @@ class WebhookProviderService:
 
     async def list_providers(
         self,
-        page: int = 1,
-        page_size: int = 20,
         provider_type: WebhookProviderType | None = None,
         is_enabled: bool | None = None,
-    ) -> tuple[list[WebhookProviderResponse], int]:
+    ) -> CustomPage[WebhookProviderResponse]:
         """List webhook providers with pagination and filtering.
 
         Args:
-            page: Page number (1-indexed)
-            page_size: Number of items per page
             provider_type: Filter by provider type
             is_enabled: Filter by enabled status
 
         Returns:
-            Tuple of (providers list, total count)
+            Paginated providers
         """
         # Build query
         stmt = select(WebhookProvider)
@@ -53,21 +51,11 @@ class WebhookProviderService:
         if is_enabled is not None:
             stmt = stmt.where(WebhookProvider.is_enabled == is_enabled)
 
-        # Count total
-        count_stmt = select(WebhookProvider)
-        if provider_type:
-            count_stmt = count_stmt.where(WebhookProvider.provider_type == provider_type)
-        if is_enabled is not None:
-            count_stmt = count_stmt.where(WebhookProvider.is_enabled == is_enabled)
-        count_result = await self.db.execute(count_stmt)
-        total = len(count_result.scalars().all())
-
-        # Paginate
-        stmt = stmt.offset((page - 1) * page_size).limit(page_size)
-        result = await self.db.execute(stmt)
-        providers = result.scalars().all()
-
-        return [self._to_response(p) for p in providers], total
+        return await apaginate(
+            self.db,
+            stmt,
+            transformer=lambda items: [self._to_response(p) for p in items],
+        )
 
     async def get_provider(self, provider_id: int) -> WebhookProviderResponse | None:
         """Get a webhook provider by ID.
@@ -177,7 +165,7 @@ class WebhookProviderService:
                 encrypt_sensitive_data(data.webhook_secret) if data.webhook_secret else None
             )
 
-        provider.updated_at = datetime.now(timezone.utc)
+        provider.updated_at = datetime.now(UTC)
 
         # Update chain supports if provided
         if data.chain_ids is not None:
@@ -346,7 +334,7 @@ class WebhookProviderService:
         if contract_addresses is not None:
             chain_support.contract_addresses = json.dumps(contract_addresses)
 
-        chain_support.updated_at = datetime.now(timezone.utc)
+        chain_support.updated_at = datetime.now(UTC)
         await self.db.commit()
 
         return True

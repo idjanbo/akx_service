@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 
 import pyotp
-from sqlalchemy import func
+from fastapi_pagination.ext.sqlmodel import apaginate
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
@@ -12,7 +12,8 @@ from src.core.config import get_settings
 from src.core.security import AESCipher
 from src.models.fee_config import FeeConfig
 from src.models.user import SupportPermission, User, UserRole, generate_api_key
-from src.utils.pagination import PaginatedResult, PaginationParams
+from src.schemas.pagination import CustomPage
+from src.schemas.user import UserResponse
 
 
 def _get_cipher() -> AESCipher:
@@ -29,17 +30,15 @@ class UserService:
 
     async def list_users(
         self,
-        params: PaginationParams,
         search: str | None = None,
         role: UserRole | None = None,
         is_active: bool | None = None,
-    ) -> PaginatedResult[User]:
+    ) -> CustomPage[UserResponse]:
         """List users with filters and pagination.
 
         Note: Super admins are excluded from the list.
 
         Args:
-            params: Pagination parameters
             search: Search by email
             role: Filter by role
             is_active: Filter by active status
@@ -58,22 +57,12 @@ class UserService:
         if is_active is not None:
             query = query.where(User.is_active == is_active)
 
-        # Count total
-        count_query = select(func.count()).select_from(query.subquery())
-        total_result = await self.db.execute(count_query)
-        total = total_result.scalar() or 0
-
-        # Fetch paginated results
         query = query.order_by(User.created_at.desc())
-        query = query.offset(params.offset).limit(params.page_size)
-        result = await self.db.execute(query)
-        users = list(result.scalars().all())
 
-        return PaginatedResult(
-            items=users,
-            total=total,
-            page=params.page,
-            page_size=params.page_size,
+        return await apaginate(
+            self.db,
+            query,
+            transformer=lambda items: [UserResponse.model_validate(u) for u in items],
         )
 
     async def get_user(self, user_id: int) -> User | None:

@@ -7,6 +7,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi_pagination import add_pagination
 
 from src.api import register_routers
 from src.core.config import get_settings
@@ -59,6 +60,9 @@ def create_app() -> FastAPI:
 
     # Register all API routers
     register_routers(app)
+
+    # Add pagination support
+    add_pagination(app)
 
     # Mount static files
     app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")

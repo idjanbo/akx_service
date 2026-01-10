@@ -3,16 +3,21 @@
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import func, select
+from fastapi_pagination.ext.sqlmodel import apaginate
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlmodel import col
+from sqlmodel import col, select
 
 from src.models.order import CallbackStatus, Order, OrderStatus, OrderType
 from src.models.user import User, UserRole
 from src.schemas.order import (
+    BatchForceCompleteRequest,
+    BatchForceCompleteResultItem,
+    BatchRetryCallbackRequest,
     ForceCompleteRequest,
     OrderQueryParams,
+    OrderResponse,
 )
+from src.schemas.pagination import CustomPage
 from src.utils.helpers import format_utc_datetime
 
 
@@ -27,20 +32,16 @@ class OrderService:
         user: User,
         order_type: OrderType,
         params: OrderQueryParams,
-        page: int = 1,
-        page_size: int = 20,
-    ) -> tuple[list[dict[str, Any]], int]:
+    ) -> CustomPage[OrderResponse]:
         """Get paginated orders with filters.
 
         Args:
             user: Current user
             order_type: deposit or withdraw
             params: Query parameters
-            page: Page number
-            page_size: Items per page
 
         Returns:
-            Tuple of (orders list, total count)
+            Paginated orders
         """
         # Base query
         query = select(Order).where(Order.order_type == order_type)
@@ -71,22 +72,15 @@ class OrderService:
         if params.end_date:
             query = query.where(Order.created_at <= params.end_date)
 
-        # Get total count
-        count_query = select(func.count()).select_from(query.subquery())
-        total = await self.db.scalar(count_query) or 0
-
-        # Apply pagination and ordering
+        # Apply ordering
         query = query.order_by(col(Order.created_at).desc())
-        query = query.offset((page - 1) * page_size).limit(page_size)
 
-        # Execute query
-        result = await self.db.execute(query)
-        orders = result.scalars().all()
-
-        # Convert to response format
-        order_list = [self._order_to_dict(order) for order in orders]
-
-        return order_list, total
+        # Paginate with transformer
+        return await apaginate(
+            self.db,
+            query,
+            transformer=lambda items: [OrderResponse(**self._order_to_dict(o)) for o in items],
+        )
 
     async def get_order(self, user: User, order_id: int) -> dict[str, Any] | None:
         """Get single order by ID.
@@ -234,6 +228,258 @@ class OrderService:
             "success": True,
             "message": "订单已强制补单成功，回调已加入发送队列",
             "order": self._order_to_dict(order),
+        }
+
+    async def batch_force_complete(
+        self,
+        user: User,
+        data: BatchForceCompleteRequest,
+    ) -> dict[str, Any]:
+        """Batch force complete orders (批量补单).
+
+        Intelligently skips orders that cannot be force completed:
+        - Already completed orders (status=SUCCESS)
+        - Orders without permission
+
+        Args:
+            user: Current user (TOTP already verified by API layer)
+            data: Request data with order_ids and remark
+
+        Returns:
+            Result dict with success/failed/skipped counts and details
+        """
+        results: list[BatchForceCompleteResultItem] = []
+        success_count = 0
+        failed_count = 0
+        skipped_count = 0
+
+        # Process each order
+        for order_id in data.order_ids:
+            order = await self.db.get(Order, order_id)
+
+            # Order not found
+            if not order:
+                results.append(
+                    BatchForceCompleteResultItem(
+                        order_id=order_id,
+                        order_no=None,
+                        success=False,
+                        message="订单不存在",
+                    )
+                )
+                failed_count += 1
+                continue
+
+            # Permission check
+            if user.role != UserRole.SUPER_ADMIN and order.merchant_id != user.id:
+                results.append(
+                    BatchForceCompleteResultItem(
+                        order_id=order_id,
+                        order_no=order.order_no,
+                        success=False,
+                        message="无权限操作此订单",
+                    )
+                )
+                failed_count += 1
+                continue
+
+            # Skip already completed orders
+            if order.status == OrderStatus.SUCCESS:
+                results.append(
+                    BatchForceCompleteResultItem(
+                        order_id=order_id,
+                        order_no=order.order_no,
+                        success=False,
+                        message="订单已是成功状态，跳过",
+                    )
+                )
+                skipped_count += 1
+                continue
+
+            # Force complete this order
+            try:
+                old_status = order.status
+                order.status = OrderStatus.SUCCESS
+                order.completed_at = datetime.now(UTC)
+                order.updated_at = datetime.now(UTC)
+
+                # Add remark
+                timestamp = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S")
+                force_remark = (
+                    f"[批量补单] {timestamp} 由 {user.email} 操作。"
+                    f"原状态: {old_status.value}。备注: {data.remark}"
+                )
+                if order.remark:
+                    order.remark = f"{order.remark}\n{force_remark}"
+                else:
+                    order.remark = force_remark
+
+                # Reset callback to trigger re-send
+                order.callback_status = CallbackStatus.PENDING
+                order.callback_retry_count = 0
+
+                results.append(
+                    BatchForceCompleteResultItem(
+                        order_id=order_id,
+                        order_no=order.order_no,
+                        success=True,
+                        message="补单成功",
+                    )
+                )
+                success_count += 1
+
+            except Exception as e:
+                results.append(
+                    BatchForceCompleteResultItem(
+                        order_id=order_id,
+                        order_no=order.order_no,
+                        success=False,
+                        message=f"补单失败: {e!s}",
+                    )
+                )
+                failed_count += 1
+
+        # Commit all changes at once
+        await self.db.commit()
+
+        # Build response message
+        total = len(data.order_ids)
+        message_parts = [f"批量补单完成，共 {total} 笔"]
+        if success_count > 0:
+            message_parts.append(f"成功 {success_count} 笔")
+        if failed_count > 0:
+            message_parts.append(f"失败 {failed_count} 笔")
+        if skipped_count > 0:
+            message_parts.append(f"跳过 {skipped_count} 笔")
+
+        return {
+            "success": success_count > 0,
+            "message": "，".join(message_parts),
+            "total": total,
+            "success_count": success_count,
+            "failed_count": failed_count,
+            "skipped_count": skipped_count,
+            "results": results,
+        }
+
+    async def batch_retry_callback(
+        self,
+        user: User,
+        data: BatchRetryCallbackRequest,
+    ) -> dict[str, Any]:
+        """Batch retry callbacks for orders (批量重发回调).
+
+        Intelligently skips orders that cannot have callbacks retried:
+        - Orders not in SUCCESS/FAILED status
+        - Orders without permission
+
+        Args:
+            user: Current user
+            data: Request data with order_ids
+
+        Returns:
+            Result dict with success/failed/skipped counts and details
+        """
+        # Only admin/support can retry callbacks
+        if user.role == UserRole.MERCHANT:
+            raise ValueError("Permission denied: only admin/support can retry callbacks")
+
+        results: list[BatchForceCompleteResultItem] = []
+        success_count = 0
+        failed_count = 0
+        skipped_count = 0
+
+        # Process each order
+        for order_id in data.order_ids:
+            order = await self.db.get(Order, order_id)
+
+            # Order not found
+            if not order:
+                results.append(
+                    BatchForceCompleteResultItem(
+                        order_id=order_id,
+                        order_no=None,
+                        success=False,
+                        message="订单不存在",
+                    )
+                )
+                failed_count += 1
+                continue
+
+            # Skip orders not in SUCCESS/FAILED status
+            if order.status not in [OrderStatus.SUCCESS, OrderStatus.FAILED]:
+                results.append(
+                    BatchForceCompleteResultItem(
+                        order_id=order_id,
+                        order_no=order.order_no,
+                        success=False,
+                        message=f"订单状态({order.status.value})不支持重发回调，跳过",
+                    )
+                )
+                skipped_count += 1
+                continue
+
+            # Skip orders with callback already pending
+            if order.callback_status == CallbackStatus.PENDING:
+                results.append(
+                    BatchForceCompleteResultItem(
+                        order_id=order_id,
+                        order_no=order.order_no,
+                        success=False,
+                        message="回调已在队列中，跳过",
+                    )
+                )
+                skipped_count += 1
+                continue
+
+            # Retry callback
+            try:
+                order.callback_status = CallbackStatus.PENDING
+                order.callback_retry_count = 0
+                order.updated_at = datetime.now(UTC)
+
+                results.append(
+                    BatchForceCompleteResultItem(
+                        order_id=order_id,
+                        order_no=order.order_no,
+                        success=True,
+                        message="已加入回调队列",
+                    )
+                )
+                success_count += 1
+
+            except Exception as e:
+                results.append(
+                    BatchForceCompleteResultItem(
+                        order_id=order_id,
+                        order_no=order.order_no,
+                        success=False,
+                        message=f"操作失败: {e!s}",
+                    )
+                )
+                failed_count += 1
+
+        # Commit all changes at once
+        await self.db.commit()
+
+        # Build response message
+        total = len(data.order_ids)
+        message_parts = [f"批量重发回调完成，共 {total} 笔"]
+        if success_count > 0:
+            message_parts.append(f"成功 {success_count} 笔")
+        if failed_count > 0:
+            message_parts.append(f"失败 {failed_count} 笔")
+        if skipped_count > 0:
+            message_parts.append(f"跳过 {skipped_count} 笔")
+
+        return {
+            "success": success_count > 0,
+            "message": "，".join(message_parts),
+            "total": total,
+            "success_count": success_count,
+            "failed_count": failed_count,
+            "skipped_count": skipped_count,
+            "results": results,
         }
 
     def _order_to_dict(self, order: Order) -> dict[str, Any]:

@@ -134,6 +134,7 @@ dependencies = [
     { name = "coincurve" },
     { name = "cryptography" },
     { name = "fastapi", extra = ["standard"] },
+    { name = "fastapi-pagination" },
     { name = "greenlet" },
     { name = "httpx", extra = ["socks"] },
     { name = "jinja2" },
@@ -168,6 +169,7 @@ requires-dist = [
     { name = "coincurve", git = "https://github.com/ofek/coincurve.git" },
     { name = "cryptography", specifier = ">=43.0.0" },
     { name = "fastapi", extras = ["standard"], specifier = ">=0.115.0" },
+    { name = "fastapi-pagination", specifier = ">=0.15.5" },
     { name = "greenlet", specifier = ">=3.3.0" },
     { name = "httpx", extras = ["socks"], specifier = ">=0.28.1" },
     { name = "jinja2", specifier = ">=3.1.6" },
@@ -994,6 +996,20 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/c2/dd/e5890bb4ee63f9d8988660b755490e346cf5769aaa7f5f3ced9afb9f090a/fastapi_cloud_cli-0.6.0.tar.gz", hash = "sha256:2c333fff2e4b93b9efbec7896ce3ffa3e77ce4cf3d8cb14e35b4f823dfddac02", size = 30579, upload-time = "2025-12-04T15:04:07.008Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/ac/2f/5ba9b5faa75067e30ff48e3c454263ebc2d2301d5509cfefe12cf9fc8156/fastapi_cloud_cli-0.6.0-py3-none-any.whl", hash = "sha256:b654890b5302c90d2f347b123a35186096328838a526316c470b6005cabd4983", size = 23215, upload-time = "2025-12-04T15:04:08.121Z" },
+]
+
+[[package]]
+name = "fastapi-pagination"
+version = "0.15.5"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "fastapi" },
+    { name = "pydantic" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/41/5e/656fa2a88b25f3362d96b838d4858cb10f75ae62a917584375be3dae30fc/fastapi_pagination-0.15.5.tar.gz", hash = "sha256:65871797e53392f5a62eb206b4e1f5494d1f64a8ed4d085a32c4f7c1a1987ee1", size = 572714, upload-time = "2026-01-08T16:19:07.372Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/47/f8/6d3dbbd818a106309d073c81081706541e8ffbf9ed581f799cf525e01e15/fastapi_pagination-0.15.5-py3-none-any.whl", hash = "sha256:a9276ad322d0c85b46f1d5e43b2ef33dce21d1a4dbf5598269752b7542a2b47b", size = 56576, upload-time = "2026-01-08T16:19:05.81Z" },
 ]
 
 [[package]]

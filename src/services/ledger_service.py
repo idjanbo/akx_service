@@ -1,9 +1,8 @@
 """Ledger Service - Business logic for balance ledger records."""
 
 from decimal import Decimal
-from typing import Any
 
-from sqlalchemy import func
+from fastapi_pagination.ext.sqlmodel import apaginate
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
@@ -16,7 +15,9 @@ from src.models.order import Order
 from src.models.user import User, UserRole
 from src.schemas.ledger import (
     BalanceLedgerQueryParams,
+    BalanceLedgerResponse,
 )
+from src.schemas.pagination import CustomPage
 
 
 class LedgerService:
@@ -216,7 +217,7 @@ class LedgerService:
         self,
         user: User,
         params: BalanceLedgerQueryParams,
-    ) -> tuple[list[dict[str, Any]], int]:
+    ) -> CustomPage[BalanceLedgerResponse]:
         """List balance ledger entries with pagination.
 
         Args:
@@ -224,19 +225,10 @@ class LedgerService:
             params: Query parameters
 
         Returns:
-            Tuple of (records, total_count)
+            Paginated records
         """
-        # Build query
-        query = (
-            select(
-                BalanceLedger,
-                Order.order_no,
-                User.email.label("user_email"),
-                User.username.label("user_username"),
-            )
-            .outerjoin(Order, BalanceLedger.order_id == Order.id)
-            .outerjoin(User, BalanceLedger.user_id == User.id)
-        )
+        # Build query - select only BalanceLedger for pagination
+        query = select(BalanceLedger)
 
         # Access control: non-admin can only see their own records
         if user.role != UserRole.SUPER_ADMIN:
@@ -254,43 +246,54 @@ class LedgerService:
         if params.end_date:
             query = query.where(BalanceLedger.created_at <= params.end_date)
 
-        # Count total
-        count_query = select(func.count()).select_from(query.subquery())
-        total = (await self.db.execute(count_query)).scalar() or 0
-
-        # Apply pagination and ordering
         query = query.order_by(BalanceLedger.created_at.desc())
-        offset = (params.page - 1) * params.page_size
-        query = query.offset(offset).limit(params.page_size)
 
-        # Execute
-        result = await self.db.execute(query)
-        rows = result.all()
+        # Define async transformer to load related data
+        async def transform_items(items: list[BalanceLedger]) -> list[BalanceLedgerResponse]:
+            result = []
+            for record in items:
+                # Load related data
+                order_no = None
+                user_email = None
+                user_username = None
 
-        # Build response
-        items = []
-        for row in rows:
-            record = row[0]
-            item = {
-                "id": record.id,
-                "user_id": record.user_id,
-                "order_id": record.order_id,
-                "change_type": record.change_type,
-                "amount": record.amount,
-                "pre_balance": record.pre_balance,
-                "post_balance": record.post_balance,
-                "frozen_amount": record.frozen_amount,
-                "pre_frozen": record.pre_frozen,
-                "post_frozen": record.post_frozen,
-                "remark": record.remark,
-                "created_at": record.created_at,
-                "order_no": row[1],
-                "user_email": row[2],
-                "user_username": row[3],
-            }
-            items.append(item)
+                if record.order_id:
+                    order = await self.db.get(Order, record.order_id)
+                    order_no = order.order_no if order else None
 
-        return items, total
+                if record.user_id:
+                    related_user = await self.db.get(User, record.user_id)
+                    if related_user:
+                        user_email = related_user.email
+                        user_username = related_user.username
+
+                result.append(
+                    BalanceLedgerResponse(
+                        id=record.id,
+                        user_id=record.user_id,
+                        order_id=record.order_id,
+                        change_type=record.change_type,
+                        amount=record.amount,
+                        pre_balance=record.pre_balance,
+                        post_balance=record.post_balance,
+                        frozen_amount=record.frozen_amount,
+                        pre_frozen=record.pre_frozen,
+                        post_frozen=record.post_frozen,
+                        remark=record.remark,
+                        operator_id=record.operator_id,
+                        created_at=record.created_at,
+                        order_no=order_no,
+                        user_email=user_email,
+                        user_username=user_username,
+                    )
+                )
+            return result
+
+        return await apaginate(
+            self.db,
+            query,
+            transformer=transform_items,
+        )
 
     async def manual_balance_adjust(
         self,

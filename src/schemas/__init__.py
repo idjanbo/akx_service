@@ -8,7 +8,6 @@ from src.schemas.fee_config import (
     FeeConfigUpdate,
 )
 from src.schemas.ledger import (
-    BalanceLedgerListResponse,
     BalanceLedgerQueryParams,
     BalanceLedgerResponse,
     ManualBalanceAdjustRequest,
@@ -36,7 +35,6 @@ __all__: list[str] = [
     "FeeCalculationResponse",
     # Ledger
     "BalanceLedgerResponse",
-    "BalanceLedgerListResponse",
     "BalanceLedgerQueryParams",
     "ManualBalanceAdjustRequest",
     # Payment

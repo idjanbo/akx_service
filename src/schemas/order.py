@@ -110,6 +110,69 @@ class ForceCompleteRequest(BaseModel):
     )
 
 
+class BatchForceCompleteRequest(BaseModel):
+    """批量补单请求。"""
+
+    order_ids: list[int] = Field(
+        min_length=1,
+        max_length=100,
+        description="订单 ID 列表（最多 100 笔）",
+    )
+    remark: str = Field(
+        min_length=1,
+        max_length=500,
+        description="补单备注（必填）",
+    )
+    totp_code: str = Field(
+        min_length=6,
+        max_length=6,
+        description="TOTP 验证码",
+    )
+
+
+class BatchForceCompleteResultItem(BaseModel):
+    """批量补单单笔结果。"""
+
+    order_id: int
+    order_no: str | None = None
+    success: bool
+    message: str
+
+
+class BatchForceCompleteResponse(BaseModel):
+    """批量补单响应。"""
+
+    success: bool
+    message: str
+    total: int
+    success_count: int
+    failed_count: int
+    skipped_count: int
+    results: list[BatchForceCompleteResultItem]
+
+
+class BatchRetryCallbackRequest(BaseModel):
+    """批量重发回调请求。"""
+
+    order_ids: list[int] = Field(
+        min_length=1,
+        max_length=100,
+        description="订单 ID 列表（最多 100 笔）",
+    )
+
+
+class BatchRetryCallbackResponse(BaseModel):
+    """批量重发回调响应。"""
+
+    success: bool
+    message: str
+    total: int
+    success_count: int
+    failed_count: int
+    skipped_count: int
+    results: list[BatchForceCompleteResultItem]
+
+
 class OrderActionResponse(BaseModel):
     """Schema for order action response."""
 

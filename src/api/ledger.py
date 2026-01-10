@@ -9,11 +9,11 @@ from src.api.deps import CurrentUser, SuperAdmin
 from src.db.engine import get_db
 from src.models.ledger import BalanceChangeType
 from src.schemas.ledger import (
-    BalanceLedgerListResponse,
     BalanceLedgerQueryParams,
     BalanceLedgerResponse,
     ManualBalanceAdjustRequest,
 )
+from src.schemas.pagination import CustomPage
 from src.services.ledger_service import LedgerService
 
 router = APIRouter(prefix="/ledger", tags=["Ledger"])
@@ -29,7 +29,7 @@ def get_ledger_service(db=Depends(get_db)) -> LedgerService:
 # =============================================================================
 
 
-@router.get("/balance-ledgers", response_model=BalanceLedgerListResponse)
+@router.get("/balance-ledgers", response_model=CustomPage[BalanceLedgerResponse])
 async def list_balance_ledgers(
     user: CurrentUser,
     service: Annotated[LedgerService, Depends(get_ledger_service)],
@@ -38,9 +38,7 @@ async def list_balance_ledgers(
     order_id: int | None = Query(None, description="Filter by order ID"),
     start_date: datetime | None = Query(None, description="Filter by start date"),
     end_date: datetime | None = Query(None, description="Filter by end date"),
-    page: int = Query(1, ge=1, description="Page number"),
-    page_size: int = Query(20, ge=1, le=100, description="Page size"),
-) -> BalanceLedgerListResponse:
+) -> CustomPage[BalanceLedgerResponse]:
     """List balance ledger entries (积分明细).
 
     Non-admin users can only see their own records.
@@ -51,18 +49,9 @@ async def list_balance_ledgers(
         order_id=order_id,
         start_date=start_date,
         end_date=end_date,
-        page=page,
-        page_size=page_size,
     )
 
-    items, total = await service.list_balance_ledgers(user, params)
-
-    return BalanceLedgerListResponse(
-        items=items,
-        total=total,
-        page=page,
-        page_size=page_size,
-    )
+    return await service.list_balance_ledgers(user, params)
 
 
 @router.post("/balance-adjust", response_model=BalanceLedgerResponse)

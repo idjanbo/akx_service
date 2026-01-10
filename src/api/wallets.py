@@ -13,9 +13,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.deps import CurrentUser
 from src.db import get_db
+from src.schemas.pagination import CustomPage
 from src.services.wallet_service import WalletService
 from src.utils.helpers import format_utc_datetime
-from src.utils.pagination import PaginationParams
 
 router = APIRouter()
 
@@ -42,15 +42,6 @@ class WalletResponse(BaseModel):
 
     class Config:
         from_attributes = True
-
-
-class PaginatedWalletsResponse(BaseModel):
-    """Paginated wallets response."""
-
-    items: list[WalletResponse]
-    total: int
-    page: int
-    page_size: int
 
 
 class GenerateWalletsRequest(BaseModel):
@@ -165,7 +156,7 @@ async def get_asset_summary(
     return AssetSummaryResponse(**result)
 
 
-@router.get("", response_model=PaginatedWalletsResponse)
+@router.get("", response_model=CustomPage[WalletResponse])
 async def list_wallets(
     user: CurrentUser,
     service: Annotated[WalletService, Depends(get_wallet_service)],
@@ -175,30 +166,20 @@ async def list_wallets(
     is_active: bool | None = None,
     search: str | None = Query(None, description="Search by address or remark"),
     user_id: int | None = Query(None, description="Filter by user ID (admin only)"),
-    page: Annotated[int, Query(ge=1)] = 1,
-    page_size: Annotated[int, Query(ge=1, le=100)] = 20,
-) -> PaginatedWalletsResponse:
+) -> CustomPage[WalletResponse]:
     """List wallets with filters.
 
     Merchants can only see their own wallets.
     Admins can see all wallets and filter by user_id.
     """
-    params = PaginationParams(page=page, page_size=page_size)
-    result = await service.list_wallets(
+    return await service.list_wallets(
         user=user,
-        params=params,
         chain_id=chain_id,
         token_id=token_id,
         source=source,
         is_active=is_active,
         search=search,
         user_id=user_id,
-    )
-    return PaginatedWalletsResponse(
-        items=[WalletResponse(**item) for item in result.items],
-        total=result.total,
-        page=result.page,
-        page_size=result.page_size,
     )
 
 

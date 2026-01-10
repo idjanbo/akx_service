@@ -12,11 +12,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.api.auth import get_current_user, require_super_admin
 from src.db.engine import get_db
 from src.models import User, WebhookProviderType
+from src.schemas.pagination import CustomPage
 from src.schemas.webhook_provider import (
     PROVIDER_TYPE_INFO,
     ProviderTypeInfo,
     WebhookProviderCreate,
-    WebhookProviderListResponse,
     WebhookProviderResponse,
     WebhookProviderUpdate,
 )
@@ -46,31 +46,20 @@ async def list_provider_types(
     return list(PROVIDER_TYPE_INFO.values())
 
 
-@router.get("", response_model=WebhookProviderListResponse)
+@router.get("", response_model=CustomPage[WebhookProviderResponse])
 async def list_providers(
     _: Annotated[User, Depends(get_current_user)],
     service: Annotated[WebhookProviderService, Depends(get_webhook_provider_service)],
-    page: int = Query(default=1, ge=1, description="Page number"),
-    page_size: int = Query(default=20, ge=1, le=100, description="Page size"),
     provider_type: WebhookProviderType | None = Query(default=None, description="Filter by type"),
     is_enabled: bool | None = Query(default=None, description="Filter by enabled status"),
-) -> WebhookProviderListResponse:
+) -> CustomPage[WebhookProviderResponse]:
     """List webhook providers with pagination and filtering.
 
     Requires authentication. Super admin can see all providers.
     """
-    providers, total = await service.list_providers(
-        page=page,
-        page_size=page_size,
+    return await service.list_providers(
         provider_type=provider_type,
         is_enabled=is_enabled,
-    )
-
-    return WebhookProviderListResponse(
-        items=providers,
-        total=total,
-        page=page,
-        page_size=page_size,
     )
 
 

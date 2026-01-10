@@ -9,12 +9,16 @@ from src.api.deps import CurrentUser, TOTPUser, totp_required
 from src.db.engine import get_db
 from src.models.order import CallbackStatus, OrderStatus, OrderType
 from src.schemas.order import (
+    BatchForceCompleteRequest,
+    BatchForceCompleteResponse,
+    BatchRetryCallbackRequest,
+    BatchRetryCallbackResponse,
     ForceCompleteRequest,
     OrderActionResponse,
-    OrderListResponse,
     OrderQueryParams,
     OrderResponse,
 )
+from src.schemas.pagination import CustomPage
 from src.services.order_service import OrderService
 
 router = APIRouter(prefix="/orders", tags=["Orders"])
@@ -30,12 +34,10 @@ def get_order_service(
 # ============ Deposit Orders ============
 
 
-@router.get("/deposits", response_model=OrderListResponse)
+@router.get("/deposits", response_model=CustomPage[OrderResponse])
 async def list_deposit_orders(
     user: CurrentUser,
     service: Annotated[OrderService, Depends(get_order_service)],
-    page: int = Query(default=1, ge=1, description="Page number"),
-    page_size: int = Query(default=20, ge=1, le=100, description="Page size"),
     order_no: str | None = Query(default=None, description="Order number (partial match)"),
     out_trade_no: str | None = Query(default=None, description="External trade number"),
     merchant_id: int | None = Query(default=None, description="Merchant ID"),
@@ -44,7 +46,7 @@ async def list_deposit_orders(
     status: OrderStatus | None = Query(default=None, description="Order status"),
     callback_status: CallbackStatus | None = Query(default=None, description="Callback status"),
     tx_hash: str | None = Query(default=None, description="Transaction hash"),
-) -> OrderListResponse:
+) -> CustomPage[OrderResponse]:
     """List deposit orders with pagination and filters."""
     params = OrderQueryParams(
         order_no=order_no,
@@ -57,31 +59,20 @@ async def list_deposit_orders(
         tx_hash=tx_hash,
     )
 
-    items, total = await service.get_orders(
+    return await service.get_orders(
         user=user,
         order_type=OrderType.DEPOSIT,
         params=params,
-        page=page,
-        page_size=page_size,
-    )
-
-    return OrderListResponse(
-        items=items,
-        total=total,
-        page=page,
-        page_size=page_size,
     )
 
 
 # ============ Withdraw Orders ============
 
 
-@router.get("/withdrawals", response_model=OrderListResponse)
+@router.get("/withdrawals", response_model=CustomPage[OrderResponse])
 async def list_withdrawal_orders(
     user: CurrentUser,
     service: Annotated[OrderService, Depends(get_order_service)],
-    page: int = Query(default=1, ge=1, description="Page number"),
-    page_size: int = Query(default=20, ge=1, le=100, description="Page size"),
     order_no: str | None = Query(default=None, description="Order number (partial match)"),
     out_trade_no: str | None = Query(default=None, description="External trade number"),
     merchant_id: int | None = Query(default=None, description="Merchant ID"),
@@ -90,7 +81,7 @@ async def list_withdrawal_orders(
     status: OrderStatus | None = Query(default=None, description="Order status"),
     callback_status: CallbackStatus | None = Query(default=None, description="Callback status"),
     tx_hash: str | None = Query(default=None, description="Transaction hash"),
-) -> OrderListResponse:
+) -> CustomPage[OrderResponse]:
     """List withdrawal orders with pagination and filters."""
     params = OrderQueryParams(
         order_no=order_no,
@@ -103,19 +94,10 @@ async def list_withdrawal_orders(
         tx_hash=tx_hash,
     )
 
-    items, total = await service.get_orders(
+    return await service.get_orders(
         user=user,
         order_type=OrderType.WITHDRAW,
         params=params,
-        page=page,
-        page_size=page_size,
-    )
-
-    return OrderListResponse(
-        items=items,
-        total=total,
-        page=page,
-        page_size=page_size,
     )
 
 
@@ -190,5 +172,58 @@ async def force_complete(
     try:
         result = await service.force_complete(user, order_id, data)
         return OrderActionResponse(**result)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/batch-force-complete", response_model=BatchForceCompleteResponse)
+@totp_required
+async def batch_force_complete(
+    data: BatchForceCompleteRequest,
+    user: TOTPUser,  # 依赖注入：确保用户已绑定 TOTP
+    service: Annotated[OrderService, Depends(get_order_service)],
+) -> BatchForceCompleteResponse:
+    """批量强制补单。
+
+    敏感操作，需要：
+    - 已绑定 TOTP
+    - TOTP 验证码正确
+    - 补单备注
+
+    智能处理：
+    - 自动跳过已成功的订单
+    - 自动跳过无权限的订单
+    - 返回每笔订单的处理结果
+
+    权限规则：
+    - 超级管理员可补任意订单
+    - 商户/客服只能补自己的订单
+    """
+    try:
+        result = await service.batch_force_complete(user, data)
+        return BatchForceCompleteResponse(**result)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/batch-retry-callback", response_model=BatchRetryCallbackResponse)
+async def batch_retry_callback(
+    data: BatchRetryCallbackRequest,
+    user: CurrentUser,
+    service: Annotated[OrderService, Depends(get_order_service)],
+) -> BatchRetryCallbackResponse:
+    """批量重发回调。
+
+    智能处理：
+    - 自动跳过非成功/失败状态的订单
+    - 自动跳过已在队列中的订单
+    - 返回每笔订单的处理结果
+
+    权限规则：
+    - 仅管理员和客服可操作
+    """
+    try:
+        result = await service.batch_retry_callback(user, data)
+        return BatchRetryCallbackResponse(**result)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

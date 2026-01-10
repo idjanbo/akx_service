@@ -2,6 +2,7 @@
 
 from typing import Any
 
+from fastapi_pagination.ext.sqlmodel import apaginate
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlmodel import select
@@ -11,9 +12,9 @@ from src.models.chain import Chain
 from src.models.token import Token
 from src.models.user import User
 from src.models.wallet import Wallet, WalletType
+from src.schemas.pagination import CustomPage
 from src.utils.crypto import generate_wallet_for_chain, validate_address_for_chain
 from src.utils.helpers import format_utc_datetime, get_token_name
-from src.utils.pagination import PaginatedResult, PaginationParams, paginate_query
 
 
 class WalletService:
@@ -27,21 +28,19 @@ class WalletService:
     async def list_wallets(
         self,
         user: User,
-        params: PaginationParams,
         chain_id: int | None = None,
         token_id: int | None = None,
         source: str | None = None,
         is_active: bool | None = None,
         search: str | None = None,
         user_id: int | None = None,
-    ) -> PaginatedResult[dict[str, Any]]:
+    ) -> CustomPage[dict[str, Any]]:
         """List wallets with filters and pagination.
 
         Relationships use lazy='selectin' in model definition.
 
         Args:
             user: Current user (for role-based filtering)
-            params: Pagination parameters
             chain_id: Filter by chain ID
             token_id: Filter by token ID
             source: Filter by source (SYSTEM_GENERATED/MANUAL_IMPORT)
@@ -87,22 +86,14 @@ class WalletService:
             query = query.where(
                 (Wallet.address.ilike(search_pattern)) | (Wallet.remark.ilike(search_pattern))
             )
-        if is_active is not None:
-            query = query.where(Wallet.is_active == is_active)
 
         query = query.order_by(Wallet.created_at.desc())
 
-        # Paginate
-        wallets, total = await paginate_query(self.db, query, params)
-
-        # Build response items directly from loaded relationships
-        items = [self._wallet_to_dict_v2(w) for w in wallets]
-
-        return PaginatedResult(
-            items=items,
-            total=total,
-            page=params.page,
-            page_size=params.page_size,
+        # Paginate with transformer
+        return await apaginate(
+            self.db,
+            query,
+            transformer=lambda items: [self._wallet_to_dict_v2(w) for w in items],
         )
 
     async def get_wallet(self, wallet_id: int, user: User) -> dict[str, Any] | None:

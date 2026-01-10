@@ -48,10 +48,7 @@ Thumbs.db
 alembic/versions/__pycache__/
 
 # Celery
-celerybeat-schedule
-celerybeat-schedule-shm
-celerybeat-schedule-wal
-celerybeat.pid
+celerybeat-*
 
 # Encryption keys (CRITICAL - never commit)
 *.key

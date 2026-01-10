@@ -8,21 +8,23 @@ from celery.exceptions import Retry
 
 from src.db.engine import close_db, get_session
 from src.models.order import CallbackStatus, Order
+from src.services.merchant_setting_service import MerchantSettingService
 from src.services.payment_service import PaymentService
 from src.tasks.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
 
 CALLBACK_TIMEOUT = 30
-CALLBACK_RETRY_INTERVALS = [60, 300, 900, 3600, 21600]  # 1m, 5m, 15m, 1h, 6h
+# Default retry intervals: 1m, 5m, 15m, 1h, 6h, 12h, 24h, 48h, 72h, 168h (7d)
+CALLBACK_RETRY_INTERVALS = [60, 300, 900, 3600, 21600, 43200, 86400, 172800, 259200, 604800]
 
 
 @celery_app.task(
     bind=True,
-    max_retries=5,
+    max_retries=10,
     autoretry_for=(Exception,),
     retry_backoff=True,
-    retry_backoff_max=21600,
+    retry_backoff_max=604800,
 )
 def send_callback(self, order_id: int) -> dict:
     """Send callback notification to merchant."""
@@ -33,6 +35,7 @@ async def _send_callback(task, order_id: int) -> dict:
     try:
         async with get_session() as db:
             service = PaymentService(db)
+            merchant_setting_service = MerchantSettingService(db)
 
             # Get order
             order = await db.get(Order, order_id)
@@ -44,6 +47,11 @@ async def _send_callback(task, order_id: int) -> dict:
             if order.callback_status == CallbackStatus.SUCCESS:
                 logger.info(f"Callback already successful for order {order_id}")
                 return {"success": True, "message": "Already sent"}
+
+            # Get merchant-specific callback retry count
+            max_retries = await merchant_setting_service.get_callback_retry_count(
+                order.merchant_id, default=3
+            )
 
             # Build callback payload
             try:
@@ -78,9 +86,11 @@ async def _send_callback(task, order_id: int) -> dict:
                         )
                         await service.mark_callback_failed(order)
 
-                        # Retry with exponential backoff
+                        # Retry with exponential backoff (respecting merchant settings)
                         retry_count = order.callback_retry_count
-                        if retry_count < len(CALLBACK_RETRY_INTERVALS):
+                        if retry_count < max_retries and retry_count < len(
+                            CALLBACK_RETRY_INTERVALS
+                        ):
                             delay = CALLBACK_RETRY_INTERVALS[retry_count]
                             task.retry(countdown=delay)
 

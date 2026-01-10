@@ -2,6 +2,7 @@
 
 import hashlib
 import hmac
+import logging
 import time
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
@@ -27,6 +28,8 @@ from src.utils.helpers import format_utc_datetime
 
 if TYPE_CHECKING:
     from src.services.ledger_service import LedgerService
+
+logger = logging.getLogger(__name__)
 
 
 class PaymentError(Exception):
@@ -395,11 +398,23 @@ class PaymentService:
         # Calculate deposit fee (based on actual payment amount)
         fee = await self._calculate_deposit_fee(merchant, payment_amount, support)
 
+        # Get merchant-specific deposit expiry time
+        from src.services.merchant_setting_service import MerchantSettingService
+
+        merchant_setting_service = MerchantSettingService(self.db)
+        deposit_expiry_seconds = await merchant_setting_service.get_deposit_expiry_seconds(
+            merchant.id, default=self.deposit_expiry_seconds
+        )
+
         # Generate unique payment amount to avoid collisions
         from src.utils.amount import generate_unique_amount
 
         try:
-            unique_amount = await generate_unique_amount(self.db, wallet.address, payment_amount)
+            unique_amount = await generate_unique_amount(
+                wallet.address,
+                payment_amount,
+                ttl_seconds=deposit_expiry_seconds + 60,  # TTL slightly longer than order expiry
+            )
         except ValueError as e:
             raise PaymentError(
                 PaymentErrorCode.WALLET_NOT_AVAILABLE,
@@ -407,7 +422,7 @@ class PaymentService:
             ) from e
 
         # Create order first to get order_id for ledger
-        expire_time = datetime.now(UTC) + timedelta(seconds=self.deposit_expiry_seconds)
+        expire_time = datetime.now(UTC) + timedelta(seconds=deposit_expiry_seconds)
         order = Order(
             order_no=generate_order_no(OrderType.DEPOSIT),
             out_trade_no=out_trade_no,
@@ -449,7 +464,7 @@ class PaymentService:
 
         expire_order.apply_async(
             args=[order.id],
-            countdown=self.deposit_expiry_seconds,
+            countdown=deposit_expiry_seconds,
             queue="orders",  # Send to orders queue
         )
 
@@ -655,6 +670,18 @@ class PaymentService:
         if new_status in (OrderStatus.SUCCESS, OrderStatus.FAILED, OrderStatus.EXPIRED):
             order.completed_at = datetime.now(UTC)
 
+            # Release unique amount suffix for deposit orders
+            if order.order_type == OrderType.DEPOSIT and order.wallet_address and order.amount:
+                from src.utils.amount import release_amount_suffix
+
+                try:
+                    await release_amount_suffix(order.wallet_address, order.amount)
+                except Exception as e:
+                    # Log but don't fail the status update
+                    logger.warning(
+                        f"Failed to release amount suffix for order {order.order_no}: {e}"
+                    )
+
         order.updated_at = datetime.now(UTC)
         self.db.add(order)
         await self.db.commit()
@@ -745,20 +772,33 @@ class PaymentService:
         await self.db.refresh(order)
         return order
 
-    async def mark_callback_failed(self, order: Order, increment_retry: bool = True) -> Order:
+    async def mark_callback_failed(
+        self, order: Order, increment_retry: bool = True, max_retries: int | None = None
+    ) -> Order:
         """Mark callback as failed.
 
         Args:
             order: Order
             increment_retry: Whether to increment retry count
+            max_retries: Max retry count (if None, uses merchant setting)
 
         Returns:
             Updated order
         """
         if increment_retry:
             order.callback_retry_count += 1
-        # Mark as permanently failed after max retries (5)
-        if order.callback_retry_count >= 5:
+
+        # Get max retries from merchant settings if not provided
+        if max_retries is None:
+            from src.services.merchant_setting_service import MerchantSettingService
+
+            merchant_setting_service = MerchantSettingService(self.db)
+            max_retries = await merchant_setting_service.get_callback_retry_count(
+                order.merchant_id, default=3
+            )
+
+        # Mark as permanently failed after max retries
+        if order.callback_retry_count >= max_retries:
             order.callback_status = CallbackStatus.FAILED
         order.last_callback_at = datetime.now(UTC)
         order.updated_at = datetime.now(UTC)

@@ -12,6 +12,7 @@ from sqlmodel import Field, Relationship, SQLModel
 if TYPE_CHECKING:
     from src.models.exchange_rate import ExchangeRate
     from src.models.fee_config import FeeConfig
+    from src.models.merchant_setting import MerchantSetting
     from src.models.wallet import Wallet
 
 
@@ -113,6 +114,11 @@ class User(SQLModel, table=True):
         sa_relationship_kwargs={"lazy": "selectin"},
     )
     exchange_rates: list["ExchangeRate"] = Relationship(back_populates="user")
+    # Merchant settings (one-to-one)
+    merchant_setting: Optional["MerchantSetting"] = Relationship(
+        back_populates="merchant",
+        sa_relationship_kwargs={"lazy": "selectin"},
+    )
     # Self-referential relationship for parent merchant
     parent: Optional["User"] = Relationship(
         sa_relationship_kwargs={

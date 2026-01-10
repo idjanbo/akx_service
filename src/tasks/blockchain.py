@@ -18,6 +18,7 @@ from src.db.engine import get_session
 from src.models import Order
 from src.models.order import OrderStatus, OrderType
 from src.tasks.callback import send_callback
+from src.tasks.telegram import trigger_deposit_failed_notification
 
 logger = logging.getLogger(__name__)
 
@@ -97,6 +98,20 @@ async def _check_transaction_confirmations(db, order: Order):
             order.status = OrderStatus.FAILED
             order.error_message = "Transaction failed on blockchain"
             logger.warning(f"Order {order.order_no} transaction failed")
+
+            # Trigger callback for failure
+            send_callback.delay(str(order.id))
+
+            # Send Telegram notification for deposit failed
+            if order.order_type == OrderType.DEPOSIT:
+                trigger_deposit_failed_notification(
+                    merchant_id=order.merchant_id,
+                    order_no=order.order_no,
+                    amount=order.amount,
+                    token=order.token,
+                    reason="区块链交易失败",
+                    merchant_order_no=order.out_trade_no,
+                )
 
             # Trigger callback for failure
             send_callback.delay(str(order.id))

@@ -73,6 +73,9 @@ class Settings(BaseSettings):
     alchemy_webhook_secret: str = Field(default="", description="Alchemy webhook signing key")
     helius_webhook_secret: str = Field(default="", description="Helius webhook auth token")
 
+    # Telegram Bot
+    telegram_bot_token: str = Field(default="", description="Telegram bot token from @BotFather")
+
     # Payment settings
     deposit_expiry_seconds: int = Field(
         default=600, description="Deposit order expiry time in seconds"

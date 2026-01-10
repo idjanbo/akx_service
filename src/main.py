@@ -11,6 +11,7 @@ from fastapi_pagination import add_pagination
 
 from src.api import register_routers
 from src.core.config import get_settings
+from src.core.redis import close_redis, init_redis
 from src.db import close_db
 
 # Base directory for static files
@@ -21,9 +22,12 @@ BASE_DIR = Path(__file__).resolve().parent
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan handler.
 
-    Shutdown: Close database connections
+    Startup: Initialize Redis connection pool
+    Shutdown: Close database and Redis connections
     """
+    await init_redis()
     yield
+    await close_redis()
     await close_db()
 
 

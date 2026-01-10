@@ -45,6 +45,7 @@ def expire_order(order_id: int) -> dict:
 async def _expire_order_async(order_id: int) -> dict:
     """Async implementation of expire_order."""
     from src.tasks.callback import send_callback
+    from src.tasks.telegram import trigger_deposit_failed_notification
 
     start_time = time.time()
     logger.info(f"[expire_order] 收到超时关闭任务 order_id={order_id}")
@@ -76,6 +77,16 @@ async def _expire_order_async(order_id: int) -> dict:
 
             # Send callback for expired order
             send_callback.delay(order.id)
+
+            # Send Telegram notification for deposit expired
+            trigger_deposit_failed_notification(
+                merchant_id=order.merchant_id,
+                order_no=order.order_no,
+                amount=order.amount,
+                token=order.token,
+                reason="订单超时未支付，已自动关闭",
+                merchant_order_no=order.out_trade_no,
+            )
 
             return {"success": True, "order_no": order.order_no}
 

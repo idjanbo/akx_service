@@ -7,6 +7,7 @@ from src.models.ledger import (
     BalanceChangeType,
     BalanceLedger,
 )
+from src.models.merchant_setting import MerchantSetting, TelegramNotificationType
 from src.models.order import CallbackStatus, Order, OrderStatus, OrderType
 from src.models.recharge import (
     CollectTask,
@@ -36,6 +37,9 @@ __all__ = [
     # User
     "User",
     "UserRole",
+    # Merchant Setting
+    "MerchantSetting",
+    "TelegramNotificationType",
     # Fee Config
     "FeeConfig",
     # Exchange Rate

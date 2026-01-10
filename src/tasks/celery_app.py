@@ -15,6 +15,7 @@ celery_app = Celery(
         "src.tasks.blockchain",
         "src.tasks.orders",
         "src.tasks.exchange_rates",
+        "src.tasks.telegram",
     ],
 )
 

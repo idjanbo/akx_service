@@ -439,6 +439,7 @@ async def _process_deposit(
     amount: Decimal,
     tx_hash: str | None,
     token_symbol: str,
+    from_address: str | None = None,
 ):
     """Process a detected deposit transaction.
 
@@ -449,7 +450,10 @@ async def _process_deposit(
         amount: Transfer amount
         tx_hash: Transaction hash
         token_symbol: Token symbol (USDT, ETH, etc.)
+        from_address: Sender address (optional, for notification)
     """
+    from src.tasks.telegram import trigger_address_income_notification
+
     if not to_address or not tx_hash:
         return
 
@@ -490,6 +494,17 @@ async def _process_deposit(
     logger.info(
         f"Deposit detected for order {order.order_no}: "
         f"{amount} {token_symbol} on {chain_code}, tx={tx_hash}"
+    )
+
+    # Send Telegram notification for address income
+    trigger_address_income_notification(
+        merchant_id=order.merchant_id,
+        address=to_address,
+        amount=amount,
+        token=token_symbol,
+        chain=chain_code,
+        tx_hash=tx_hash,
+        from_address=from_address,
     )
 
 

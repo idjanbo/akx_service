@@ -1,77 +1,123 @@
 """Amount utilities for unique payment amounts."""
 
-import random
-from datetime import UTC, datetime
-from decimal import Decimal
+from decimal import ROUND_DOWN, Decimal
 
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlmodel import select
+from src.core.redis import get_redis
 
-from src.models.order import Order, OrderStatus
+# Amount suffix range: 1-9 (add 0.001 ~ 0.009 to the original amount)
+SUFFIX_MIN = 1
+SUFFIX_MAX = 9
+SUFFIX_COUNT = 9  # 1-9
+
+
+def _get_base_amount_3dp(payment_amount: Decimal) -> Decimal:
+    """Get base amount truncated to 3 decimal places.
+
+    Example: 100.1234 -> 100.123, 99.9999 -> 99.999
+    """
+    return payment_amount.quantize(Decimal("0.001"), rounding=ROUND_DOWN)
+
+
+def _build_redis_key(wallet_address: str, base_amount_3dp: Decimal) -> str:
+    """Build Redis key for tracking used suffixes.
+
+    Key format: unique_amount:{address}:{base_amount_3dp}
+    Example: unique_amount:TXxx...xxx:100.123
+    """
+    return f"unique_amount:{wallet_address}:{base_amount_3dp}"
 
 
 async def generate_unique_amount(
-    db: AsyncSession,
     wallet_address: str,
-    requested_amount: Decimal,
+    payment_amount: Decimal,
+    ttl_seconds: int = 900,
 ) -> Decimal:
-    """Generate a unique payment amount by adding a random suffix.
+    """Generate a unique payment amount using Redis atomic operations.
 
-    To avoid collisions when multiple orders share the same address,
-    we add a random 3-decimal suffix (0.001 ~ 0.999) to the amount.
+    Adds 0.001 ~ 0.009 to the original amount (truncated to 3dp).
+    Carry-over is acceptable (e.g., 100.999 + 0.001 = 101.000).
 
     Args:
-        db: Database session
         wallet_address: The deposit wallet address
-        requested_amount: Original amount requested by merchant
+        payment_amount: Payment amount (already converted to token)
+        ttl_seconds: TTL for Redis key (default 15 minutes, should >= order expiry)
 
     Returns:
-        Unique amount with random suffix (e.g., 100.00 -> 100.123)
+        Unique amount with suffix added (e.g., 100.123 -> 100.125)
 
     Raises:
-        ValueError: If all 999 suffixes are occupied (extremely rare)
+        ValueError: If all 9 suffixes (1-9) are occupied
+
+    Example:
+        payment_amount = 100.123
+        possible results: 100.124, 100.125, ..., 100.132
     """
-    # Get the integer part as base
-    base_amount = int(requested_amount)
+    r = get_redis()
 
-    # Query existing pending order amounts for this address with same base amount
-    query = (
-        select(Order.amount)
-        .where(Order.wallet_address == wallet_address)
-        .where(Order.status == OrderStatus.PENDING)
-        .where(Order.expire_time > datetime.now(UTC))
+    # Get base amount (truncated to 3 decimals)
+    base_amount_3dp = _get_base_amount_3dp(payment_amount)
+    redis_key = _build_redis_key(wallet_address, base_amount_3dp)
+
+    # Try to find an available suffix using Redis SET for atomic operations
+    for _ in range(SUFFIX_COUNT + 1):  # +1 for safety
+        # Atomic increment counter to get next suffix candidate
+        counter_key = f"{redis_key}:counter"
+        counter = await r.incr(counter_key)
+        await r.expire(counter_key, ttl_seconds)
+
+        # Calculate suffix (1-9)
+        suffix = (counter % SUFFIX_COUNT) + 1
+
+        # Try to add suffix to used set (atomic SADD returns 1 if new, 0 if exists)
+        used_key = f"{redis_key}:used"
+        added = await r.sadd(used_key, suffix)
+        await r.expire(used_key, ttl_seconds)
+
+        if added == 1:
+            # Successfully reserved this suffix
+            final_amount = base_amount_3dp + Decimal(suffix) / Decimal(1000)
+            return final_amount
+
+    # All 9 suffixes are occupied
+    raise ValueError(
+        f"No available amount suffix for address {wallet_address} "
+        f"with base amount {base_amount_3dp}. All {SUFFIX_COUNT} suffixes (1-9) are occupied."
     )
-    result = await db.execute(query)
-    existing_amounts = result.scalars().all()
 
-    # Extract used suffixes (last 3 decimals) for same base amount
-    used_suffixes: set[int] = set()
-    for amount in existing_amounts:
-        if int(amount) == base_amount:
-            # Extract suffix: 100.123 -> 123
-            suffix = int((amount % 1) * 1000)
-            used_suffixes.add(suffix)
 
-    # Also consider the original amount's suffix if it has decimals
-    original_suffix = int((requested_amount % 1) * 1000)
+async def release_amount_suffix(
+    wallet_address: str,
+    amount: Decimal,
+) -> bool:
+    """Release a previously reserved amount suffix.
 
-    # Generate available suffixes (001 ~ 999)
-    all_suffixes = set(range(1, 1000))
-    available_suffixes = list(all_suffixes - used_suffixes)
+    Call this when an order is completed, cancelled, or expired
+    to free up the suffix for reuse.
 
-    if not available_suffixes:
-        raise ValueError(
-            f"No available amount suffix for address {wallet_address} "
-            f"with base amount {base_amount}. All 999 suffixes are occupied."
-        )
+    Args:
+        wallet_address: The deposit wallet address
+        amount: The full amount (e.g., 100.125)
 
-    # Prefer keeping original suffix if available and non-zero
-    if original_suffix > 0 and original_suffix not in used_suffixes:
-        chosen_suffix = original_suffix
-    else:
-        chosen_suffix = random.choice(available_suffixes)
+    Returns:
+        True if suffix was released, False if not found
+    """
+    r = get_redis()
 
-    # Build final amount: base + suffix/1000
-    final_amount = Decimal(base_amount) + Decimal(chosen_suffix) / Decimal(1000)
+    # We need to find the original base amount by subtracting the suffix
+    # The suffix is 1-9, so we try each possibility
+    amount_3dp = _get_base_amount_3dp(amount)
 
-    return final_amount
+    # Try suffixes 1-9 to find which base amount this came from
+    for suffix in range(SUFFIX_MIN, SUFFIX_MAX + 1):
+        potential_base = amount_3dp - Decimal(suffix) / Decimal(1000)
+        redis_key = _build_redis_key(wallet_address, potential_base)
+        used_key = f"{redis_key}:used"
+
+        # Check if this suffix exists in the set
+        is_member = await r.sismember(used_key, suffix)
+        if is_member:
+            # Found it, remove from set
+            removed = await r.srem(used_key, suffix)
+            return removed == 1
+
+    return False

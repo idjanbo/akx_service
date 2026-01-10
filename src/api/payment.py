@@ -60,6 +60,14 @@ def payment_error_response(error: PaymentError, status_code: int = 400) -> JSONR
     )
 
 
+@router.post("/test-callback")
+def test_callback(request: dict):
+    # 打印收到的请求详情
+    print("Received callback request:", request)
+    # 模拟处理逻辑
+    return {"status": "ok"}
+
+
 # ============ Deposit Endpoints ============
 
 

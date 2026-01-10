@@ -426,7 +426,8 @@ merchant_no + timestamp + nonce + out_trade_no + order_type
 
 1. 订单完成后，系统会向 `callback_url` 发送 POST 请求
 2. 回调失败会自动重试，重试间隔：1分钟、5分钟、15分钟、1小时、6小时
-3. 商户需返回 HTTP 200 表示接收成功
+3. **商户需返回 HTTP 200 且响应体包含 `ok` 或 `success`（不区分大小写）表示接收成功**
+4. 其他响应将视为回调失败，系统会按重试策略重新发送
 
 ### 回调参数
 
@@ -512,6 +513,33 @@ def verify_callback(data: dict, deposit_key: str, withdraw_key: str) -> bool:
     ).hexdigest()
     
     return hmac.compare_digest(expected_sign.lower(), sign.lower())
+```
+
+### 商户回调处理示例（Python Flask）
+
+```python
+from flask import Flask, request
+
+app = Flask(__name__)
+
+@app.route('/api/callback', methods=['POST'])
+def handle_callback():
+    data = request.json
+    
+    # 1. 验证签名
+    if not verify_callback(data, DEPOSIT_KEY, WITHDRAW_KEY):
+        return 'invalid signature', 400
+    
+    # 2. 处理业务逻辑（幂等处理）
+    order_no = data['order_no']
+    status = data['status']
+    
+    if status == 'success':
+        # 更新订单状态、发放商品等
+        process_success_order(order_no, data)
+    
+    # 3. 返回成功响应（必须返回 ok 或 success）
+    return 'ok'  # 或 'OK', 'success', 'SUCCESS' 都可以
 ```
 
 ---

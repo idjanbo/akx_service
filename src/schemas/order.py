@@ -130,15 +130,6 @@ class BatchForceCompleteRequest(BaseModel):
     )
 
 
-class BatchForceCompleteResultItem(BaseModel):
-    """批量补单单笔结果。"""
-
-    order_id: int
-    order_no: str | None = None
-    success: bool
-    message: str
-
-
 class BatchForceCompleteResponse(BaseModel):
     """批量补单响应。"""
 
@@ -148,7 +139,6 @@ class BatchForceCompleteResponse(BaseModel):
     success_count: int
     failed_count: int
     skipped_count: int
-    results: list[BatchForceCompleteResultItem]
 
 
 class BatchRetryCallbackRequest(BaseModel):
@@ -170,7 +160,6 @@ class BatchRetryCallbackResponse(BaseModel):
     success_count: int
     failed_count: int
     skipped_count: int
-    results: list[BatchForceCompleteResultItem]
 
 
 class OrderActionResponse(BaseModel):

@@ -4,6 +4,7 @@ import asyncio
 import logging
 
 import httpx
+from celery.exceptions import Retry
 
 from src.db.engine import close_db, get_session
 from src.models.order import CallbackStatus, Order
@@ -60,8 +61,13 @@ async def _send_callback(task, order_id: int) -> dict:
                         headers={"Content-Type": "application/json"},
                     )
 
-                    # Check response - HTTP 200 means success
-                    if response.status_code == 200:
+                    # Check response - HTTP 200 and body contains "ok" or "success"
+                    response_text = response.text.strip().lower()
+                    is_success = response.status_code == 200 and (
+                        "ok" in response_text or "success" in response_text
+                    )
+
+                    if is_success:
                         await service.mark_callback_success(order)
                         logger.info(f"Callback successful for order {order_id}")
                         return {"success": True, "message": "Callback sent"}
@@ -93,6 +99,9 @@ async def _send_callback(task, order_id: int) -> dict:
                 await service.mark_callback_failed(order)
                 raise  # Will trigger retry
 
+    except Retry:
+        # Retry 异常是正常的重试信号，直接抛出让 Celery 处理
+        raise
     except Exception as e:
         logger.exception(f"Callback task error for order {order_id}: {e}")
         raise

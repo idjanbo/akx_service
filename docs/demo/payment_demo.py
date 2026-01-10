@@ -240,7 +240,7 @@ if __name__ == "__main__":
     deposit_result = create_deposit_order(
         out_trade_no=f"DEP_TEST_{order_suffix}",
         amount="100.00",
-        callback_url="https://example.com/callback/deposit",
+        callback_url="http://localhost:8000/api/v1/payment/test-callback",
         currency="USDT",  # 默认值，可省略
         extra_data='{"user_id": 12345, "remark": "测试充值"}',
     )

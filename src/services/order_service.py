@@ -11,13 +11,13 @@ from src.models.order import CallbackStatus, Order, OrderStatus, OrderType
 from src.models.user import User, UserRole
 from src.schemas.order import (
     BatchForceCompleteRequest,
-    BatchForceCompleteResultItem,
     BatchRetryCallbackRequest,
     ForceCompleteRequest,
     OrderQueryParams,
     OrderResponse,
 )
 from src.schemas.pagination import CustomPage
+from src.tasks.callback import send_callback
 from src.utils.helpers import format_utc_datetime
 
 
@@ -143,9 +143,9 @@ class OrderService:
         if not order:
             raise ValueError("Order not found")
 
-        # Only completed orders can have callbacks retried
-        if order.status not in [OrderStatus.SUCCESS, OrderStatus.FAILED]:
-            raise ValueError("Order status does not support callback retry")
+        # Only successful orders can have callbacks retried
+        if order.status != OrderStatus.SUCCESS:
+            raise ValueError("只有成功状态的订单才能重发回调")
 
         # Reset callback status
         order.callback_status = CallbackStatus.PENDING
@@ -155,9 +155,8 @@ class OrderService:
         await self.db.commit()
         await self.db.refresh(order)
 
-        # Trigger callback task (TODO: integrate with Celery)
-        # from src.tasks.orders import send_callback_task
-        # send_callback_task.delay(order.id)
+        # Trigger callback task
+        send_callback.delay(order.id)
 
         return {
             "success": True,
@@ -220,9 +219,8 @@ class OrderService:
         await self.db.commit()
         await self.db.refresh(order)
 
-        # Trigger callback task (TODO: integrate with Celery)
-        # from src.tasks.orders import send_callback_task
-        # send_callback_task.delay(order.id)
+        # Trigger callback task
+        send_callback.delay(order.id)
 
         return {
             "success": True,
@@ -246,53 +244,33 @@ class OrderService:
             data: Request data with order_ids and remark
 
         Returns:
-            Result dict with success/failed/skipped counts and details
+            Result dict with success/failed/skipped counts
         """
-        results: list[BatchForceCompleteResultItem] = []
         success_count = 0
         failed_count = 0
         skipped_count = 0
+        success_order_ids: list[int] = []
 
-        # Process each order
+        # Batch query all orders at once
+        query = select(Order).where(Order.id.in_(data.order_ids))
+        result = await self.db.execute(query)
+        orders_map = {order.id: order for order in result.scalars().all()}
+
         for order_id in data.order_ids:
-            order = await self.db.get(Order, order_id)
+            order = orders_map.get(order_id)
 
             # Order not found
             if not order:
-                results.append(
-                    BatchForceCompleteResultItem(
-                        order_id=order_id,
-                        order_no=None,
-                        success=False,
-                        message="订单不存在",
-                    )
-                )
                 failed_count += 1
                 continue
 
             # Permission check
             if user.role != UserRole.SUPER_ADMIN and order.merchant_id != user.id:
-                results.append(
-                    BatchForceCompleteResultItem(
-                        order_id=order_id,
-                        order_no=order.order_no,
-                        success=False,
-                        message="无权限操作此订单",
-                    )
-                )
                 failed_count += 1
                 continue
 
             # Skip already completed orders
             if order.status == OrderStatus.SUCCESS:
-                results.append(
-                    BatchForceCompleteResultItem(
-                        order_id=order_id,
-                        order_no=order.order_no,
-                        success=False,
-                        message="订单已是成功状态，跳过",
-                    )
-                )
                 skipped_count += 1
                 continue
 
@@ -318,29 +296,18 @@ class OrderService:
                 order.callback_status = CallbackStatus.PENDING
                 order.callback_retry_count = 0
 
-                results.append(
-                    BatchForceCompleteResultItem(
-                        order_id=order_id,
-                        order_no=order.order_no,
-                        success=True,
-                        message="补单成功",
-                    )
-                )
                 success_count += 1
+                success_order_ids.append(order_id)
 
-            except Exception as e:
-                results.append(
-                    BatchForceCompleteResultItem(
-                        order_id=order_id,
-                        order_no=order.order_no,
-                        success=False,
-                        message=f"补单失败: {e!s}",
-                    )
-                )
+            except Exception:
                 failed_count += 1
 
         # Commit all changes at once
         await self.db.commit()
+
+        # Send Celery tasks for successful orders
+        for order_id in success_order_ids:
+            send_callback.delay(order_id)
 
         # Build response message
         total = len(data.order_ids)
@@ -359,7 +326,6 @@ class OrderService:
             "success_count": success_count,
             "failed_count": failed_count,
             "skipped_count": skipped_count,
-            "results": results,
         }
 
     async def batch_retry_callback(
@@ -370,65 +336,39 @@ class OrderService:
         """Batch retry callbacks for orders (批量重发回调).
 
         Intelligently skips orders that cannot have callbacks retried:
-        - Orders not in SUCCESS/FAILED status
-        - Orders without permission
+        - Orders not in SUCCESS status
 
         Args:
             user: Current user
             data: Request data with order_ids
 
         Returns:
-            Result dict with success/failed/skipped counts and details
+            Result dict with success/failed/skipped counts
         """
         # Only admin/support can retry callbacks
         if user.role == UserRole.MERCHANT:
             raise ValueError("Permission denied: only admin/support can retry callbacks")
 
-        results: list[BatchForceCompleteResultItem] = []
         success_count = 0
         failed_count = 0
         skipped_count = 0
+        success_order_ids: list[int] = []
 
-        # Process each order
+        # Batch query all orders at once
+        query = select(Order).where(Order.id.in_(data.order_ids))
+        result = await self.db.execute(query)
+        orders_map = {order.id: order for order in result.scalars().all()}
+
         for order_id in data.order_ids:
-            order = await self.db.get(Order, order_id)
+            order = orders_map.get(order_id)
 
             # Order not found
             if not order:
-                results.append(
-                    BatchForceCompleteResultItem(
-                        order_id=order_id,
-                        order_no=None,
-                        success=False,
-                        message="订单不存在",
-                    )
-                )
                 failed_count += 1
                 continue
 
-            # Skip orders not in SUCCESS/FAILED status
-            if order.status not in [OrderStatus.SUCCESS, OrderStatus.FAILED]:
-                results.append(
-                    BatchForceCompleteResultItem(
-                        order_id=order_id,
-                        order_no=order.order_no,
-                        success=False,
-                        message=f"订单状态({order.status.value})不支持重发回调，跳过",
-                    )
-                )
-                skipped_count += 1
-                continue
-
-            # Skip orders with callback already pending
-            if order.callback_status == CallbackStatus.PENDING:
-                results.append(
-                    BatchForceCompleteResultItem(
-                        order_id=order_id,
-                        order_no=order.order_no,
-                        success=False,
-                        message="回调已在队列中，跳过",
-                    )
-                )
+            # Skip orders not in SUCCESS status
+            if order.status != OrderStatus.SUCCESS:
                 skipped_count += 1
                 continue
 
@@ -438,29 +378,18 @@ class OrderService:
                 order.callback_retry_count = 0
                 order.updated_at = datetime.now(UTC)
 
-                results.append(
-                    BatchForceCompleteResultItem(
-                        order_id=order_id,
-                        order_no=order.order_no,
-                        success=True,
-                        message="已加入回调队列",
-                    )
-                )
                 success_count += 1
+                success_order_ids.append(order_id)
 
-            except Exception as e:
-                results.append(
-                    BatchForceCompleteResultItem(
-                        order_id=order_id,
-                        order_no=order.order_no,
-                        success=False,
-                        message=f"操作失败: {e!s}",
-                    )
-                )
+            except Exception:
                 failed_count += 1
 
         # Commit all changes at once
         await self.db.commit()
+
+        # Send Celery tasks for successful orders
+        for order_id in success_order_ids:
+            send_callback.delay(order_id)
 
         # Build response message
         total = len(data.order_ids)
@@ -479,7 +408,6 @@ class OrderService:
             "success_count": success_count,
             "failed_count": failed_count,
             "skipped_count": skipped_count,
-            "results": results,
         }
 
     def _order_to_dict(self, order: Order) -> dict[str, Any]:

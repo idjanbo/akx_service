@@ -230,7 +230,9 @@ class PaymentService:
 
     # ============ Token/Chain Validation ============
 
-    async def validate_token_chain(self, token_code: str, chain_code: str) -> tuple[Token, Chain]:
+    async def validate_token_chain(
+        self, token_code: str, chain_code: str
+    ) -> tuple[Token, Chain, TokenChainSupport]:
         """Validate token and chain combination.
 
         Args:
@@ -238,7 +240,7 @@ class PaymentService:
             chain_code: Chain code (lowercase, e.g., 'tron')
 
         Returns:
-            Tuple of (Token, Chain)
+            Tuple of (Token, Chain, TokenChainSupport)
 
         Raises:
             PaymentError: If token/chain is invalid or not supported
@@ -286,7 +288,7 @@ class PaymentService:
                 f"Token '{token_code}' is not supported on chain '{chain_code}'",
             )
 
-        return token, chain
+        return token, chain, support
 
     async def get_token_chain_support(
         self, token_id: int, chain_id: int
@@ -316,6 +318,7 @@ class PaymentService:
         out_trade_no: str,
         token: Token,
         chain: Chain,
+        support: TokenChainSupport,
         amount: Decimal,
         callback_url: str,
         extra_data: str | None = None,
@@ -328,6 +331,7 @@ class PaymentService:
             out_trade_no: External trade number
             token: Token
             chain: Chain
+            support: Token-chain support config (pre-fetched from validate_token_chain)
             amount: Deposit amount (in requested_currency)
             callback_url: Callback URL
             extra_data: Extra data
@@ -385,9 +389,8 @@ class PaymentService:
             payment_amount = calc_result["payment_amount"]
             exchange_rate = calc_result["exchange_rate"]
 
-        # Check minimum deposit
-        support = await self.get_token_chain_support(token.id, chain.id)
-        if support and support.min_deposit:
+        # Check minimum deposit (support already passed in)
+        if support.min_deposit:
             min_amount = Decimal(support.min_deposit)
             if payment_amount < min_amount:
                 raise PaymentError(
@@ -395,8 +398,9 @@ class PaymentService:
                     f"Amount must be at least {min_amount} {token.code}",
                 )
 
-        # Calculate deposit fee (based on actual payment amount)
-        fee = await self._calculate_deposit_fee(merchant, payment_amount, support)
+        # Get fee config once and calculate deposit fee
+        fee_config = await self._get_fee_config(merchant)
+        fee = self._calculate_deposit_fee(payment_amount, fee_config)
 
         # Get merchant-specific deposit expiry time
         from src.services.merchant_setting_service import MerchantSettingService
@@ -476,6 +480,7 @@ class PaymentService:
         out_trade_no: str,
         token: Token,
         chain: Chain,
+        support: TokenChainSupport,
         amount: Decimal,
         to_address: str,
         callback_url: str,
@@ -488,6 +493,7 @@ class PaymentService:
             out_trade_no: External trade number
             token: Token
             chain: Chain
+            support: Token-chain support config (pre-fetched from validate_token_chain)
             amount: Withdrawal amount
             to_address: Destination address
             callback_url: Callback URL
@@ -520,9 +526,8 @@ class PaymentService:
                 "Invalid wallet address",
             )
 
-        # Check minimum withdrawal
-        support = await self.get_token_chain_support(token.id, chain.id)
-        if support and support.min_withdrawal:
+        # Check minimum withdrawal (support already passed in)
+        if support.min_withdrawal:
             min_amount = Decimal(support.min_withdrawal)
             if amount < min_amount:
                 raise PaymentError(
@@ -530,8 +535,9 @@ class PaymentService:
                     f"Withdrawal amount must be at least {min_amount}",
                 )
 
-        # Calculate fee
-        fee = await self._calculate_withdraw_fee(merchant, amount, support)
+        # Get fee config once and calculate withdrawal fee
+        fee_config = await self._get_fee_config(merchant)
+        fee = self._calculate_withdraw_fee(amount, support, fee_config)
 
         # Create order first to get order_id for ledger
         net_amount = amount  # User receives full amount, fee is separate
@@ -815,14 +821,16 @@ class PaymentService:
         chain_id: int,
         token_id: int | None,
     ) -> Wallet | None:
-        """Get an available deposit wallet using round-robin allocation.
+        """Get an available deposit wallet using round-robin allocation with row locking.
 
         Selection logic:
         1. Wallets with NULL last_used_at are prioritized (never used)
         2. Then sorted by last_used_at ascending (least recently used first)
         3. On selection, update last_used_at to current time
+        4. Uses FOR UPDATE SKIP LOCKED to handle concurrent requests
 
-        This ensures each wallet is used in rotation before repeating.
+        This ensures each wallet is used in rotation before repeating,
+        and concurrent requests will get different wallets.
 
         Args:
             merchant_id: Merchant ID
@@ -855,6 +863,7 @@ class PaymentService:
                 Wallet.created_at,  # Then by creation time
             )
             .limit(1)
+            .with_for_update(skip_locked=True)  # Row lock, skip already locked rows
         )
 
         # If token_id specified, filter by it
@@ -872,74 +881,69 @@ class PaymentService:
 
         return wallet
 
-    async def _calculate_deposit_fee(
+    async def _get_fee_config(self, merchant: User) -> FeeConfig | None:
+        """Get fee config for merchant (merchant-specific or default).
+
+        Args:
+            merchant: Merchant user
+
+        Returns:
+            FeeConfig or None
+        """
+        # Try merchant's fee config first
+        if merchant.fee_config_id:
+            fee_config = await self.db.get(FeeConfig, merchant.fee_config_id)
+            if fee_config:
+                return fee_config
+
+        # Fall back to default fee config
+        result = await self.db.execute(
+            select(FeeConfig).where(FeeConfig.is_default == True)  # noqa: E712
+        )
+        return result.scalar_one_or_none()
+
+    def _calculate_deposit_fee(
         self,
-        merchant: User,
         amount: Decimal,
-        support: TokenChainSupport | None,
+        fee_config: FeeConfig | None,
     ) -> Decimal:
         """Calculate deposit fee.
 
         Args:
-            merchant: Merchant user
             amount: Deposit amount
-            support: Token-chain support config (not used for deposit fee currently)
+            fee_config: Fee configuration (pre-fetched)
 
         Returns:
             Fee amount
         """
-        # Fall back to merchant's fee config
-        if merchant.fee_config_id:
-            fee_config = await self.db.get(FeeConfig, merchant.fee_config_id)
-            if fee_config:
-                return fee_config.calculate_deposit_fee(amount)
-
-        # Fall back to default fee config
-        result = await self.db.execute(
-            select(FeeConfig).where(FeeConfig.is_default == True)  # noqa: E712
-        )
-        default_config = result.scalar_one_or_none()
-        if default_config:
-            return default_config.calculate_deposit_fee(amount)
-
-        # No fee config found, return 0
+        if fee_config:
+            return fee_config.calculate_deposit_fee(amount)
         return Decimal("0")
 
-    async def _calculate_withdraw_fee(
+    def _calculate_withdraw_fee(
         self,
-        merchant: User,
         amount: Decimal,
         support: TokenChainSupport | None,
+        fee_config: FeeConfig | None,
     ) -> Decimal:
         """Calculate withdrawal fee.
 
         Args:
-            merchant: Merchant user
             amount: Withdrawal amount
             support: Token-chain support config
+            fee_config: Fee configuration (pre-fetched)
 
         Returns:
             Fee amount
         """
-        # Try to get fee from token-chain support
+        # Try to get fee from token-chain support first
         if support and support.withdrawal_fee:
             return Decimal(support.withdrawal_fee)
 
-        # Fall back to merchant's fee config
-        if merchant.fee_config_id:
-            fee_config = await self.db.get(FeeConfig, merchant.fee_config_id)
-            if fee_config:
-                return fee_config.calculate_withdraw_fee(amount)
+        # Fall back to fee config
+        if fee_config:
+            return fee_config.calculate_withdraw_fee(amount)
 
-        # Fall back to default fee config
-        result = await self.db.execute(
-            select(FeeConfig).where(FeeConfig.is_default == True)  # noqa: E712
-        )
-        default_config = result.scalar_one_or_none()
-        if default_config:
-            return default_config.calculate_withdraw_fee(amount)
-
-        # No fee config found, return 0
         return Decimal("0")
 
     def _validate_address(self, address: str, chain_code: str) -> bool:

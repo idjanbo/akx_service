@@ -114,8 +114,8 @@ async def create_deposit(
             signature_message=sign_message,
         )
 
-        # Validate token and chain
-        token, chain = await service.validate_token_chain(request.token, request.chain)
+        # Validate token and chain (returns support for reuse)
+        token, chain, support = await service.validate_token_chain(request.token, request.chain)
 
         # Create order with currency support
         order = await service.create_deposit_order(
@@ -123,6 +123,7 @@ async def create_deposit(
             out_trade_no=request.out_trade_no,
             token=token,
             chain=chain,
+            support=support,
             amount=Decimal(request.amount),
             callback_url=request.callback_url,
             extra_data=request.extra_data,
@@ -219,8 +220,8 @@ async def create_withdraw(
             signature_message=sign_message,
         )
 
-        # Validate token and chain
-        token, chain = await service.validate_token_chain(request.token, request.chain)
+        # Validate token and chain (returns support for reuse)
+        token, chain, support = await service.validate_token_chain(request.token, request.chain)
 
         # Create order
         order = await service.create_withdraw_order(
@@ -228,6 +229,7 @@ async def create_withdraw(
             out_trade_no=request.out_trade_no,
             token=token,
             chain=chain,
+            support=support,
             amount=Decimal(request.amount),
             to_address=request.to_address,
             callback_url=request.callback_url,

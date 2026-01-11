@@ -267,6 +267,9 @@ class LedgerService:
                         user_email = related_user.email
                         user_username = related_user.username
 
+                # Build merchant_no (M + user_id)
+                merchant_no = f"M{record.user_id}" if record.user_id else None
+
                 result.append(
                     BalanceLedgerResponse(
                         id=record.id,
@@ -285,6 +288,7 @@ class LedgerService:
                         order_no=order_no,
                         user_email=user_email,
                         user_username=user_username,
+                        merchant_no=merchant_no,
                     )
                 )
             return result

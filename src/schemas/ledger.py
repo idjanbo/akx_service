@@ -38,6 +38,7 @@ class BalanceLedgerResponse(BaseModel):
     order_no: str | None = None
     user_email: str | None = None
     user_username: str | None = None
+    merchant_no: str | None = None  # 商户号 (M + user_id)
     operator_email: str | None = None
 
     class Config:
